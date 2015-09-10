@@ -1,0 +1,12 @@
+<% if !@@sw_stack.empty? %>classes:
+<% @@sw_stack.each do |sw, settings| %>  - <%= @@sw_mods[sw].split('/').last %>
+<% end %>
+<% end %>
+
+<% sw = 'php' %>
+<% if @@sw_stack[sw].has_key?(Setting::SW_VERSION) %>
+#<%= "=" * 40 %>
+# <%= @@sw_mods[sw] %>
+#<%= "=" * 20 %>
+php::ensure: '<%= (@@sw_stack[sw][Setting::SW_VERSION].empty? or @@sw_stack[sw][Setting::SW_VERSION].size > 1) ? 'latest' : @@sw_stack[sw][Setting::SW_VERSION][0] %>'
+<% end %>

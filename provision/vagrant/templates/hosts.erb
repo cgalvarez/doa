@@ -1,0 +1,5 @@
+host { '<%= DOA::Host.hostname %>':
+  ensure  => '<%= remove ? 'absent' : 'present' %>',
+  target  => '<%= hosts_path %>',
+  ip      => '<%= DOA::Host.ip %>',
+}

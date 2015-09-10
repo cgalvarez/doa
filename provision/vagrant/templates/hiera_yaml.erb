@@ -1,0 +1,7 @@
+:hierarchy:
+  - "%{::hostname}"
+  - common
+:backends:
+  - yaml
+:yaml:
+  :datadir: '<%= DOA::Provisioner::Puppet::HIERA_DATA_DIR %>'

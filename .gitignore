@@ -1,0 +1,6 @@
+./provision/puppet/hiera
+.vagrant
+Gemfile
+Gemfile.lock
+Guardfile
+machines.yml

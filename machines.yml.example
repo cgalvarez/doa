@@ -1,0 +1,13 @@
+dev:
+  box: 'ubuntu/trusty64'
+  ip: '192.128.0.12'
+  cpus: 1
+  memory: 512
+  hostname: 'dev'
+  fqdn: 'dev.automatter.guest'
+  sync:
+    exclude:
+      - '.meteor/*'
+    listen:
+      '../myplugin': '~/myplugin'
+    
