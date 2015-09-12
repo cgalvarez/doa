@@ -1,5 +1,4 @@
 forge "https://forgeapi.puppetlabs.com"
 
-<% @@sw_stack.each do |sw, settings| %>
-mod '<%= @@sw_mods[sw] %>'
+<% @@puppetfile_mods.each do |mod_id, trash| %>mod '<%= mod_id %>'
 <% end %>

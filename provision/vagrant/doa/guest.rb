@@ -226,7 +226,7 @@ module DOA
     def self.manage_hosts(remove = false, hosts_path = nil)
       # Create the puppet manifest to insert the host IP into the guest's hosts file
       if self.running?
-        if hosts_path.nil? 
+        if hosts_path.nil?
           @@os = @@os.nil? ? @@provider.get_os(@@provider_vname) : @@os
           hosts_path = @@os == OS::WINDOWS ? 'C:/Windows/System32/Drivers/etc/hosts' : '/etc/hosts'
         end

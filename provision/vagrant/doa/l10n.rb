@@ -45,7 +45,8 @@ module DOA
     PROVIDER_NOT_SUPPORTED = "Provider '%s' is not officially supported yet (machine '%s')... "
     
     # puppet.rb
-    UNRECOGNIZED_VERSION = "%s ERROR [%s » %s » %s » %s]: Unrecognized reserved keyword or malformed semver string... "
+    UNSUPPORTED_SW = "%s ERROR [%s » %s » %s]: The software '%s' has no support... "
+    UNRECOGNIZED_VERSION = "%s ERROR [%s » %s » %s » %s]: Unrecognized reserved keyword, malformed semver string or not allowed string... "
     SETTING_UP_PROVISIONER = "%s Setting up provisioner %s for %s... "
     PROVISIONING_STACK = "%s Provisioning requested stack for %s with %s... "
     ###CREATING_PUPPETFILE = "%s Creating Puppetfile for %s..."

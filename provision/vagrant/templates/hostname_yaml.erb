@@ -1,12 +1,38 @@
-<% if !@@sw_stack.empty? %>classes:
-<% @@sw_stack.each do |sw, settings| %>  - <%= @@sw_mods[sw].split('/').last %>
+<% if !@@puppetfile_mods.nil? and !@@puppetfile_mods.empty? %>classes:
+<% @@puppetfile_mods.each do |mod, trash|
+if @@hiera_include[mod] %>  - <%= mod.split('/').last %><% end %>
 <% end %>
 <% end %>
 
-<% sw = 'php' %>
-<% if @@sw_stack[sw].has_key?(Setting::SW_VERSION) %>
-#<%= "=" * 40 %>
-# <%= @@sw_mods[sw] %>
-#<%= "=" * 20 %>
+<%
+  begin_sep = "=" * 40
+  end_sep = "=" * 20
+%>
+
+<% if !@@sw_stack.nil? and !@@sw_stack.empty? %>
+<% @@sw_stack.each do |sw, settings| %>
+<% if !settings.empty? %>
+
+<% case sw
+when Setting::SW_PHP %>
+<%= '#' + begin_sep + "\n# " + sw + "\n#" + end_sep %>
+<% if settings.has_key?(Setting::SW_VERSION) %>
 php::ensure: '<%= (@@sw_stack[sw][Setting::SW_VERSION].empty? or @@sw_stack[sw][Setting::SW_VERSION].size > 1) ? 'latest' : @@sw_stack[sw][Setting::SW_VERSION][0] %>'
 <% end %>
+
+<% when Setting::SW_MARIADB
+    requires = []
+    requires.insert(-1, 'Class[php]') if @@sw_stack.has_key?(Setting::SW_PHP)
+    requires.insert(-1, 'Swap_file::Files[mariadb_swapfile]') if @@puppetfile_mods.has_key?(Puppet::PUPPET_MOD_SWAP)
+    if !requires.empty?
+%>
+<%= '#' + begin_sep + "\n# " + sw + "\n#" + end_sep %>
+mariadb::require: <% requires.each do |require| %>
+  - <%= require %><% end %>
+<% end %>
+
+<% end # case %>
+
+<% end # if !settings.empty? %>
+<% end # loop @@sw_stack %>
+<% end # if @@sw_stack %>

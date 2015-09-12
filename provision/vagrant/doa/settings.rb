@@ -33,7 +33,10 @@ module DOA
 
     # Software
     SW_VERSION        = 'version'
-    SW_VERSION_DEFAULT= 'latest'
+    ###SW_VERSION_DEFAULT= 'latest'
     SW_WP             = 'wordpress'
+    SW_PHP            = 'php'
+    SW_MARIADB        = 'mariadb'
+    SW_METEOR         = 'meteor'
   end
 end

@@ -65,7 +65,7 @@ module DOA
       @@ruby      = "#{ ENV['VAGRANT_INSTALLER_EMBEDDED_DIR'] }\\bin\\ruby.exe"
       @@gems_path = "#{ ENV['VAGRANT_INSTALLER_EMBEDDED_DIR'] }\\gems;#{ @@home_path }/gems".gsub('\\', '/')  # ENV['GEM_PATH']
       @@local_data_path         = "#{ @@cwd }/.vagrant"
-      @@vagrant_provision_path  = "#{ @@cwd }/provision/vagrant/"
+      @@vagrant_provision_path  = "#{ @@cwd }/provision/vagrant"
       Env.install_requirements
     end
 
