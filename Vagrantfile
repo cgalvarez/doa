@@ -39,13 +39,15 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       # Read more: https://github.com/mitchellh/vagrant/issues/1673
       machine.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
 
-      # Configure the latest version of the desired provisioner in the guest machine
-      case DOA::Guest.provisioner.class.const_get(:TYPE)
-      when DOA::Provisioner::Docker::TYPE then
-        # Docker provisioning
-      else
-        # Update puppet/r10k/librarian-puppet to their latest versions
-        machine.vm.provision 'shell', path: 'provision/shell/puppet.sh'
+      # Configure the latest version of the desired provisioner in the guest
+      if DOA::Guest.provision
+        case DOA::Guest.provisioner.class.const_get(:TYPE)
+        when DOA::Provisioner::Docker::TYPE then
+          # Docker provisioning
+        else
+          # Update puppet/r10k/librarian-puppet to their latest versions
+          machine.vm.provision 'shell', path: 'provision/shell/puppet.sh'
+        end
       end
 
       # ALWAYS reload host info with Vagrant internal info and the current guest
@@ -69,16 +71,17 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         DOA::Guest.manage_hosts
         DOA::Guest.add_session_keys
 
-        # Create Puppetfile for the given guest machine stack
-        case DOA::Guest.provisioner.class.const_get(:TYPE)
-        when DOA::Provisioner::Docker::TYPE then
-          # Docker provisioning
-        else
-          # Default provisioner: Puppet
-          DOA::Guest.provisioner.class.setup_puppet_provision
+        # Setup the provision for the desired guest machine stack by the user
+        if DOA::Guest.provision
+          case DOA::Guest.provisioner.class.const_get(:TYPE)
+          when DOA::Provisioner::Docker::TYPE then
+            # Docker provisioning
+          else
+            # Default provisioner: Puppet
+            DOA::Guest.provisioner.class.setup_puppet_provision
+          end
         end
 
-        
         # Start bg-rsyncing @ guest before => Creates folders structure if
         # missing with appropriate ownership and permissions
         DOA::Guest.sync.start

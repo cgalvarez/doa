@@ -43,7 +43,7 @@ command -v r10k >/dev/null 2>&1 && R10K_VER_INSTALLED=$(${PUPPET_BIN_PATH}/r10k 
 R10K_VER_CANDIDATE=$(${PUPPET_BIN_PATH}/gem list r10k --remote | sed -n 's/^r10k\s*(\([0-9\.][0-9\.]*\)).*/\1/p')
 if [ -z "${R10K_VER_INSTALLED}" ] || [ "${R10K_VER_INSTALLED}" != "${R10K_VER_CANDIDATE}" ]; then
   echo "Installing the latest version of R10K..."
-  #${PUPPET_BIN_PATH}/gem install r10k
+  ${PUPPET_BIN_PATH}/gem install r10k
 fi
 
 # Source: https://github.com/purple52/librarian-puppet-vagrant

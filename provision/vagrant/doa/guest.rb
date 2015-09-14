@@ -36,6 +36,7 @@ module DOA
     @@sync            = nil
     @@user            = nil
     @@os              = nil
+    @@provision       = false
 
     # Getters
     def self.name
@@ -89,6 +90,9 @@ module DOA
     def self.os
       @@os.nil? ? @@provider.get_os(@@provider_vname) : @@os
     end
+    def self.provision
+      @@provision
+    end
 
     # Makes the default initialization.
     # +name+:: string containing the name of the guest machine
@@ -128,6 +132,9 @@ module DOA
         @@ip = @@provider.get_ip(@@provider_vname)
       elsif settings.has_key?('ip') and !(settings['ip'] =~ DOA::Guest::IP_REGEX).nil?
         @@ip = settings['ip']
+      end
+      if ARGV.include?('--provision')
+        @@provision = true
       end
     end
 
