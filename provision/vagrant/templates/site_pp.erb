@@ -1,22 +1,6 @@
+# Include required classes
 hiera_include('classes')
 
-<% if @@puppetfile_mods.has_key?(Puppet::PUPPET_MOD_SWAP) %>
-# Swap file (required to have MariaDB installed on VPS with less than 1GB)
-swap_file::files { 'mariadb_swapfile':
-  ensure        => 'present',
-  swapfile      => '/mnt/mariadb_swapfile',
-  swapfilesize  => '256000000',
-  require       => Class['mariadb'],
-}
-<% end %>
-
-<% if @@sw_stack.has_key?(Setting::SW_METEOR) %>
-# Meteor framework
-exec { 'install_meteor':
-  command     => '/usr/bin/curl https://install.meteor.com/ | /bin/sh',
-  environment => 'HOME=<%= DOA::Guest::HOME %>',
-  user        => '<%= DOA::Guest::USER %>',
-  group       => '<%= DOA::Guest::USER %>',
-  unless      => '/usr/bin/which meteor',
-}
+<% if !@@relationships.empty? %># Set order relationships with chaining arrows
+<%= @@relationships.keys.join("\n") %>
 <% end %>

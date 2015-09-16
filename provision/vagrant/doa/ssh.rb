@@ -37,6 +37,17 @@ module DOA
       return ret
     end
 
+    def self.ssh_capture(key, user, from_os, to_address, to_os, cmd)
+      quote = from_os == OS::WINDOWS ? "'" : ''
+      cmd_separator = to_os == OS::WINDOWS ? ' & ' : ' ; '
+      ret = `ssh -l #{ user } #{ SSH::OPT_SSH } -i #{ quote }#{ key }#{ quote } #{ to_address } "#{ cmd.join(cmd_separator) }"`
+      if $?.exitstatus != 0
+        puts DOA::L10n::FAIL_ERROR
+        raise SystemExit
+      end
+      return ret
+    end
+
     def self.scp(key, from_os, from_path, to_address, to_os, to_path)
       quote = from_os == OS::WINDOWS ? "'" : ''
       `scp #{ SSH::OPT_SCP } -i #{ quote }#{ key }#{ quote } #{ SSH.escape(from_os, from_path) } #{ to_address }:#{ SSH.escape(to_os, to_path) }`

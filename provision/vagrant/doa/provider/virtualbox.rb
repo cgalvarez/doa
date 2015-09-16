@@ -106,11 +106,11 @@ module DOA
 
       # Gets the IPv4 address of the guest machine.
       # Params:
-      # +vname+:: string with the name of the guest virtual machine
-      def get_ip(vname)
+      # +uid+:: string with the name of the guest virtual machine
+      def get_ip(uid)
         ip = nil
         if !@@vboxmanage.nil? and !@@vboxmanage.empty?
-          vb_cmd = "\"#{ @@vboxmanage }\" guestproperty get \"#{ vname }\" /VirtualBox/GuestInfo/Net/1/V4/IP"
+          vb_cmd = "\"#{ @@vboxmanage }\" guestproperty get \"#{ uid }\" /VirtualBox/GuestInfo/Net/1/V4/IP"
           vb_cmd += DOA::Host.os == DOA::OS::WINDOWS ? ' 2>NUL' : ' 2>/dev/null'
           ip = `#{ vb_cmd } | awk -v OFS="\\n" '{ print $2 }'`.strip
         end
@@ -119,13 +119,13 @@ module DOA
 
       # Checks if the guest virtual machine is running.
       # Params:
-      # +vname+:: string with the name of the guest virtual machine
-      def running?(vname)
+      # +uid+:: string with the name of the guest virtual machine
+      def running?(uid)
         running = false
         if !@@vboxmanage.nil? and !@@vboxmanage.empty?
           vb_cmd = "\"#{ @@vboxmanage }\" list runningvms"
           vb_cmd += DOA::Host.os == DOA::OS::WINDOWS ? ' 2>NUL' : ' 2>/dev/null'
-          `#{ vb_cmd } | grep '#{ vname }'`
+          `#{ vb_cmd } | grep '#{ uid }'`
           running = $?.exitstatus == 0
         end
         return running
@@ -133,16 +133,26 @@ module DOA
 
       # Gets the OS of the guest virtual machine.
       # Params:
-      # +vname+:: string with the name of the guest virtual machine
-      def get_os(vname)
+      # +uid+:: string with the name of the guest virtual machine
+      def get_os(uid)
         os = nil
         if !@@vboxmanage.nil? and !@@vboxmanage.empty?
-          vb_cmd = "\"#{ @@vboxmanage }\" guestproperty get \"#{ vname }\" /VirtualBox/GuestInfo/OS/Product"
+          vb_cmd = "\"#{ @@vboxmanage }\" guestproperty get \"#{ uid }\" /VirtualBox/GuestInfo/OS/Product"
           vb_cmd += DOA::Host.os == DOA::OS::WINDOWS ? ' 2>NUL' : ' 2>/dev/null'
           os = `#{ vb_cmd } | awk -v OFS="\\n" '{ print $2 }'`.strip
           os = OS::WINDOWS if /^.*Windows.*$/.match(os)
         end
         return os
+      end
+
+      # Checks if virtual machine with the provided UID exists.
+      # Params:
+      # +uid+:: string with the name of the guest virtual machine
+      def exist?(uid)
+        if !@@vboxmanage.nil? and !@@vboxmanage.empty?
+          return !`"#{ @@vboxmanage }" list vms | grep '"#{ uid }"'`.strip.empty?
+        end
+        return false
       end
     end
   end

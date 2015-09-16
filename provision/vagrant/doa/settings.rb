@@ -35,8 +35,15 @@ module DOA
     SW_VERSION        = 'version'
     ###SW_VERSION_DEFAULT= 'latest'
     SW_WP             = 'wordpress'
+    SW_APT            = 'apt'
     SW_PHP            = 'php'
     SW_MARIADB        = 'mariadb'
     SW_METEOR         = 'meteor'
+    SW_COUCHDB        = 'couchdb'
+    
+    # Package managers
+    PKG_MNGR_DEBIAN   = 'apt' # Debian, Ubuntu
+    PKG_MNGR_RHEL     = 'yum' # Ascendos, CentOS, CloudLinux, Fedora, OEL,
+                              # OracleLinux, OVS, PSBM, RedHat, Scientific, SLC
   end
 end

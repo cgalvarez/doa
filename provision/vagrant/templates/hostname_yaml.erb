@@ -1,38 +1,35 @@
-<% if !@@puppetfile_mods.nil? and !@@puppetfile_mods.empty? %>classes:
-<% @@puppetfile_mods.each do |mod, trash|
-if @@hiera_include[mod] %>  - <%= mod.split('/').last %><% end %>
-<% end %>
-<% end %>
+<% if !@@hiera_classes.nil? and !@@hiera_classes.empty? %>classes:
+<% @@hiera_classes.each do |puppetforge_mod, trash| %>  - <%= puppetforge_mod.split('/').last %>
+<% end # each classes %>
+<% end # if %>
 
 <%
   begin_sep = "=" * 40
   end_sep = "=" * 20
-%>
-
-<% if !@@sw_stack.nil? and !@@sw_stack.empty? %>
-<% @@sw_stack.each do |sw, settings| %>
-<% if !settings.empty? %>
-
-<% case sw
-when Setting::SW_PHP %>
-<%= '#' + begin_sep + "\n# " + sw + "\n#" + end_sep %>
-<% if settings.has_key?(Setting::SW_VERSION) %>
-php::ensure: '<%= (@@sw_stack[sw][Setting::SW_VERSION].empty? or @@sw_stack[sw][Setting::SW_VERSION].size > 1) ? 'latest' : @@sw_stack[sw][Setting::SW_VERSION][0] %>'
-<% end %>
-
-<% when Setting::SW_MARIADB
-    requires = []
-    requires.insert(-1, 'Class[php]') if @@sw_stack.has_key?(Setting::SW_PHP)
-    requires.insert(-1, 'Swap_file::Files[mariadb_swapfile]') if @@puppetfile_mods.has_key?(Puppet::PUPPET_MOD_SWAP)
-    if !requires.empty?
+  
+  if !@@sw_stack.nil? and !@@sw_stack.empty?
+    @@sw_stack.each do |sw, settings|
+      if !settings.empty?
 %>
 <%= '#' + begin_sep + "\n# " + sw + "\n#" + end_sep %>
-mariadb::require: <% requires.each do |require| %>
-  - <%= require %><% end %>
-<% end %>
-
-<% end # case %>
-
-<% end # if !settings.empty? %>
-<% end # loop @@sw_stack %>
-<% end # if @@sw_stack %>
+<%
+    case sw
+    when Setting::SW_MARIADB
+      requires = []
+      requires.insert(-1, 'Class[php]') if @@sw_stack.has_key?(Setting::SW_PHP)
+      requires.insert(-1, 'Swap_file::Files[mariadb_swapfile]') if @@puppetfile_mods.has_key?(Puppet::PUPPET_MOD_SWAP)
+      if !requires.empty?
+%>mariadb::require: <% requires.each do |require| %>
+  - <%= require %><% end #require
+      end #if
+    end # case
+    
+    # Process software parameters
+    settings.each do |param, value|
+%><%= sw %>::<%= param %>:<%= Tools.format_yaml(value, 1) %>
+<%
+      end # loop sw settings
+    end # if sw settings
+  end # loop @@sw_stack
+end # if @@sw_stack
+%>

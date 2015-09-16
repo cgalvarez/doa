@@ -35,7 +35,10 @@ module DOA
     @@settings        = nil
     @@sync            = nil
     @@user            = nil
-    @@os              = nil
+    @@os              = nil     # Filled and cached by chosen provider
+    @@os_family       = nil     # Filled and cached by chosen provisioner
+    @@os_distro       = nil     # Filled and cached by chosen provisioner
+    @@os_distro_ver   = nil     # Filled and cached by chosen provisioner
     @@provision       = false
 
     # Getters
@@ -90,6 +93,24 @@ module DOA
     def self.os
       @@os.nil? ? @@provider.get_os(@@provider_vname) : @@os
     end
+    def self.os_family
+      @@os_family
+    end
+    def self.set_os_family(value)
+      @@os_family = value
+    end
+    def self.os_distro
+      @@os_distro
+    end
+    def self.set_os_distro(value)
+      @@os_distro = value
+    end
+    def self.os_distro_ver
+      @@os_distro_ver
+    end
+    def self.set_os_distro_ver(value)
+      @@os_distro_ver = value
+    end
     def self.provision
       @@provision
     end
@@ -136,6 +157,9 @@ module DOA
       if ARGV.include?('--provision')
         @@provision = true
       end
+      @@os_family       = nil     # Filled and cached by chosen provisioner
+      @@os_distro       = nil     # Filled and cached by chosen provisioner
+      @@os_distro_ver   = nil     # Filled and cached by chosen provisioner
     end
 
     # Reloads internal attributes for current guest session.

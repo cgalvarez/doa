@@ -1,2 +1,2 @@
 confdir=<%= DOA::Provisioner::Puppet::CONFDIR %>
-basemodulepath=$confdir/modules:$modulepath:/etc/doa/modules
+basemodulepath=$confdir/modules:$modulepath:<%= DOA::Provisioner::Puppet::MODS_PATH_CUSTOM %>

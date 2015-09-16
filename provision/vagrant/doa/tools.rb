@@ -11,6 +11,15 @@ module DOA
     MSG_MISSING_VALUE = 'missing_value'
     MSG_WRONG_VALUE   = 'wrong_value'
     MSG_WRONG_TYPE    = 'wrong_type'
+    RGX_STRING_INT    = /^\A\d+\z$/
+    RGX_UNIX_ABSPATH  = /^\A(?:[\w-]+\/?)+\z$/
+    RGX_IPV4          = /^\A(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\Z$/
+    RGX_SEMVER        = /^(\d+\.\d+\.\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/
+    RGX_SEMVER_FAMILY = /^((\d+\.\d+\.\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))|(\d+\.([0-9]+\.([0-9]+|[xX])|[xX])))?$/
+    MAX_PORT          = 65535
+    MIN_PORT          = 0
+    YAML_TAB          = '  '
+
 
     # Gets the value of a setting with type integer.
     # Params:
@@ -128,5 +137,86 @@ module DOA
       end
       return value
     end
+
+    # Returns +true+ if +check+ is a valid IPv4 address.
+    def self.valid_ipv4?(check)
+      ###if /\A(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\Z/ =~ addr
+      if !check.nil? and Tools::RGX_IPV4 =~ check
+        return $~.captures.all? {|i| i.to_i < 256}
+      end
+      return false
+    end
+
+    # Returns +true+ if +check+ is a valid UNIX absolute path.
+    def self.valid_unix_abspath?(check)
+      require 'pathname'
+      puts check
+      puts Tools::RGX_UNIX_ABSPATH
+      puts (Pathname.new check)
+      return (!check.nil? and !(Tools::RGX_UNIX_ABSPATH =~ check).nil? and (Pathname.new(check)).absolute?)
+      return true
+    end
+
+    # Returns +true+ if +check+ is a valid port number.
+    def self.valid_port?(check)
+      if !check.nil? and 
+          (check.is_a? Integer and check <= Tools::MAX_PORT and check >= Tools::MIN_PORT) or
+          (check.is_a? String and Tools::RGX_STRING_INT =~ check and check.to_i <= Tools::MAX_PORT and check.to_i >= Tools::MIN_PORT)
+        return true
+      end
+      return false
+    end
+
+    # Returns +true+ if +check+ is a valid port number.
+    # Params:
+    # +check+:: value to check
+    # +allowed+:: array with the allowed subset of values; defaults to empty array [] (not taken into account)
+    # +keywords+:: array with the allowed keywords; defaults to empty array [] (not taken into account)
+    # +semver+:: whether to perform semver format checking or not; defaults to true
+    # +family+:: whether to perform semver + family format checking (Major.x, Major.Minor.x) or not; defaults to true
+    def self.valid_version?(check, allowed = [], keywords = [], semver = true, family = true)
+      # Check the format of the version when provided.
+      # Allowed values for software version (depends on config of @@ver_format):
+      #   - Specific version string (semantic versioning rules)
+      #   - Version family (5.x, 3.2.x,...)
+      #   - Reserved keyword: 'latest', 'present', 'absent'
+      if (!allowed.empty? and allowed.include?(check)) or
+            (!keywords.empty? and keywords.include?(check)) or
+            (family and !(check =~ Tools::RGX_SEMVER_FAMILY).nil?) or
+            (semver and !(check =~ Tools::RGX_SEMVER).nil?)
+        # SEMVER: https://github.com/jlindsey/semantic
+        return true
+      end
+      return false
+    end
+
+    # Returns +true+ if +check+ is a valid port number.
+    # Params:
+    # +check+:: value to check
+    # +allowed+:: array with the allowed subset of values; defaults to empty array [] (not taken into account)
+    # +keywords+:: array with the allowed keywords; defaults to empty array [] (not taken into account)
+    # +semver+:: whether to perform semver format checking or not; defaults to true
+    # +family+:: whether to perform semver + family format checking (Major.x, Major.Minor.x) or not; defaults to true
+    def self.format_yaml(item, depth)
+      indent = Tools::YAML_TAB * depth
+      if item.is_a?(String) or item.is_a?(Integer)
+        return " #{ item.to_s }"
+      elsif item.is_a?(Array)
+        return value.to_yaml.gsub("---", '').gsub("\n", "\n#{ indent }")
+      elsif item.is_a?(Hash)
+        text = ''
+        item.each do |key, val|
+          text = "#{ text.to_s }\n#{ indent }#{ key }:#{ Tools.format_yaml(val, depth + 1) }"
+        end
+        return text
+      end
+    end
   end
+end
+
+class ::Hash
+    def deep_merge(second)
+        merger = proc { |key, v1, v2| Hash === v1 && Hash === v2 ? v1.merge(v2, &merger) : v2 }
+        self.merge(second, &merger)
+    end
 end

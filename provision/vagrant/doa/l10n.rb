@@ -45,7 +45,8 @@ module DOA
     PROVIDER_NOT_SUPPORTED = "Provider '%s' is not officially supported yet (machine '%s')... "
     
     # puppet.rb
-    UNSUPPORTED_SW = "%s ERROR [%s » %s » %s]: The software '%s' has no support... "
+    UNSUPPORTED_SW = "\n%s ERROR [%s » %s]: The software '%s' has no support... "
+    UNRECOGNIZED_SW_PARAM = "%s ERROR [%s » %s » %s]: Unrecognized parameter '%s'... "
     UNRECOGNIZED_VERSION = "%s ERROR [%s » %s » %s » %s]: Unrecognized reserved keyword, malformed semver string or not allowed string... "
     SETTING_UP_PROVISIONER = "%s Setting up provisioner %s for %s... "
     PROVISIONING_STACK = "%s Provisioning requested stack for %s with %s... "
@@ -61,9 +62,17 @@ module DOA
     MISSING_PARAM_TYPE_CTX_SITE     = "%s ERROR [%s » %s]: A value must be provided for parameter '%s'"
     MISSING_PARAM_TYPE_CTX_SW       = "%s ERROR [%s » %s » %s]: A value must be provided for parameter '%s'"
     MISSING_PARAM_TYPE_CTX_ASSET    = "%s ERROR [%s » %s » %s » %s]: A value must be provided for parameter '%s'"
-    WRONG_TYPE_CTX_VM               = "%s ERROR [%s]: '%s', when provided, must be %s type"
-    WRONG_TYPE_CTX_SITE             = "%s ERROR [%s » %s]: '%s', when provided, must be %s type"
-    WRONG_TYPE_CTX_SW               = "%s ERROR [%s » %s » %s]: '%s', when provided, must be %s type"
-    WRONG_TYPE_CTX_ASSET            = "%s ERROR [%s » %s » %s » %s]: '%s', when provided, must be %s type"
+    WRONG_TYPE_CTX_VM               = "%s ERROR [%s]: '%s' must be %s type"
+    WRONG_TYPE_CTX_SITE             = "%s ERROR [%s » %s]: '%s' must be %s type"
+    WRONG_TYPE_CTX_SW               = "%s ERROR [%s » %s » %s]: '%s' must be %s type"
+    WRONG_TYPE_CTX_ASSET            = "%s ERROR [%s » %s » %s » %s]: '%s' must be %s type"
+    WRONG_TYPE_FN_PARAM_CTX_VM      = "%s ERROR [%s]: parameter '%s' must be %s type for method '%s'"
+    WRONG_TYPE_FN_PARAM_CTX_SITE    = "%s ERROR [%s » %s]: parameter '%s' must be %s type for method '%s'"
+    WRONG_TYPE_FN_PARAM_CTX_SW      = "%s ERROR [%s » %s » %s]: parameter '%s' must be %s type for method '%s'"
+    WRONG_TYPE_FN_PARAM_CTX_ASSET   = "%s ERROR [%s » %s » %s » %s]: parameter '%s' must be %s type for method '%s'"
+    MALFORMED_FN_PARAM_CTX_VM       = "%s ERROR [%s]: malformed parameter '%s' in method '%s'"
+    MALFORMED_FN_PARAM_CTX_SITE     = "%s ERROR [%s » %s]: malformed parameter '%s' in method '%s'"
+    MALFORMED_FN_PARAM_CTX_SW       = "%s ERROR [%s » %s » %s]: malformed parameter '%s' in method '%s'"
+    MALFORMED_FN_PARAM_CTX_ASSET    = "%s ERROR [%s » %s » %s » %s]: malformed parameter '%s' in method '%s'"
   end
 end

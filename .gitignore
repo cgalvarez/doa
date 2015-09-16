@@ -1,4 +1,4 @@
-./provision/puppet/hiera
+**/.project
 .vagrant
 Gemfile
 Gemfile.lock

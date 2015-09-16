@@ -25,6 +25,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   machines.each do |name, settings|
     config.vm.define name do |machine|
       DOA::Guest.load(name, settings)
+      machine_exist = DOA::Guest.provider.exist?(DOA::Guest.provider_vname)
 
       # Setup virtual machine
       machine.vm.box = DOA::Guest.box
@@ -40,13 +41,14 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       machine.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
 
       # Configure the latest version of the desired provisioner in the guest
-      if DOA::Guest.provision
+      if DOA::Guest.provision or !machine_exist
         case DOA::Guest.provisioner.class.const_get(:TYPE)
         when DOA::Provisioner::Docker::TYPE then
           # Docker provisioning
         else
           # Update puppet/r10k/librarian-puppet to their latest versions
           machine.vm.provision 'shell', path: 'provision/shell/puppet.sh'
+          machine.vm.synced_folder "provision/puppet/modules/", DOA::Provisioner::Puppet::MODS_PATH_CUSTOM
         end
       end
 
@@ -72,13 +74,13 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         DOA::Guest.add_session_keys
 
         # Setup the provision for the desired guest machine stack by the user
-        if DOA::Guest.provision
+        if DOA::Guest.provision or !machine_exist
           case DOA::Guest.provisioner.class.const_get(:TYPE)
           when DOA::Provisioner::Docker::TYPE then
             # Docker provisioning
           else
             # Default provisioner: Puppet
-            DOA::Guest.provisioner.class.setup_puppet_provision
+            DOA::Guest.provisioner.class.setup_provision
           end
         end
 
