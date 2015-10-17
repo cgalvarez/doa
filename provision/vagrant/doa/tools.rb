@@ -4,21 +4,35 @@ module DOA
   class Tools
 
     # Constants
-    TYPE_STRING       = 'String'
-    TYPE_INTEGER      = 'Integer'
-    TYPE_ARRAY        = 'Array'
-    TYPE_HASH         = 'Hash'
-    MSG_MISSING_VALUE = 'missing_value'
-    MSG_WRONG_VALUE   = 'wrong_value'
-    MSG_WRONG_TYPE    = 'wrong_type'
-    RGX_STRING_INT    = /^\A\d+\z$/
-    RGX_UNIX_ABSPATH  = /^\A(?:[\w-]+\/?)+\z$/
-    RGX_IPV4          = /^\A(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\Z$/
-    RGX_SEMVER        = /^(\d+\.\d+\.\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/
-    RGX_SEMVER_FAMILY = /^((\d+\.\d+\.\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))|(\d+\.([0-9]+\.([0-9]+|[xX])|[xX])))?$/
-    MAX_PORT          = 65535
-    MIN_PORT          = 0
-    YAML_TAB          = '  '
+    TYPE_STRING         = 'String'
+    TYPE_INTEGER        = 'Integer'
+    TYPE_ARRAY          = 'Array'
+    TYPE_HASH           = 'Hash'
+    MSG_MISSING_VALUE   = 'missing_value'
+    MSG_WRONG_VALUE     = 'wrong_value'
+    MSG_WRONG_TYPE      = 'wrong_type'
+    # Regex for Linux package name validator
+    # See: http://www.linuxquestions.org/questions/slackware-14/characters-allowed-in-package-name-and-version-string-4175552002/
+    RGX_INTEGER         = /\A\d+\z/
+    RGX_CHMOD           = /\A0[0-7]{3}\z/
+    RGX_LINUX_PKG_NAME  = /\A[a-zA-Z0-9][.+@\-\w]+\z/
+    RGX_STRING_INT      = /\A\d+\z/
+    RGX_UNIX_ABSPATH    = /\A(?:\/[.\w-]+)+\z/
+    RGX_UNIX_RELPATH    = /\A(?:[.\w-]+\/?)+\z/
+    RGX_UNIX_PATH       = /\A(?:\/?[.\w-]+\/?)+\z/
+    RGX_IPV4            = /\A((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\z/ #/\A(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\z/
+    RGX_IPV4_PORT       = /\A((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])(:(6553[0-5]|654[0-9]{2}|65[0-4][0-9]{3}|6[0-4][0-9]{3}|[0-5]?[0-9]{1,4}))?\z/
+    RGX_PORT            = /\A(6553[0-5]|654[0-9]{2}|65[0-4][0-9]{3}|6[0-4][0-9]{3}|[0-5]?[0-9]{1,4})\z/
+    # IPv6 regex. See http://stackoverflow.com/questions/53497/regular-expression-that-matches-valid-ipv6-addresses
+    RGX_IPV6 = /\A(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|[fF][eE]80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::([fF]{4}(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\z/
+    RGX_SEMVER_VERSION  = /\A(\d+\.\d+\.\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?\z/
+    RGX_SEMVER_BRANCH   = /\A(\d+\.[xX]|\d+\.\d+\.[xX])\z/
+    RGX_SEMVER          = /\A((\d+\.\d+\.\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))|(\d+\.([0-9]+\.([0-9]+|[xX])|[xX])))?\z/
+    #RGX_SEMVER_MINOR    = /\A(\d+\.\d+)\.\d+(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?\z/
+    RGX_SEMVER_MINOR    = /\A(\d+\.\d+)(?:\..*)\z/
+    MAX_PORT            = 65535
+    MIN_PORT            = 0
+    YAML_TAB            = '  '
 
 
     # Gets the value of a setting with type integer.
@@ -138,8 +152,66 @@ module DOA
       return value
     end
 
+    # Returns +true+ if +check+ is a non-empty hash of values (anything but array or hash).
+    def self.valid_hash_values?(check)
+      if !check.is_a?(Hash) or check.empty?
+        return false
+      else
+        check.each do |key, val|
+          return false if val.is_a?(Hash) or val.is_a?(Array)
+        end
+      end
+      true
+    end
+
+    # Returns +true+ if +check+ is a non-empty hash of flags (boolean or on/off string).
+    def self.valid_hash_flags?(check)
+      if !check.is_a?(Hash) or check.empty?
+        return false
+      else
+        check.each do |key, val|
+          return false if !((val.is_a?(String) and (val == 'on' or val == 'off')) or Tools::valid_boolean?(val))
+        end
+      end
+      true
+    end
+
+    # Returns +true+ if +check+ is a non-empty array.
+    def self.valid_array?(check)
+      (check.is_a?(Array) and !check.empty?)
+    end
+
+    # Returns +true+ if +check+ is a valid boolean value.
+    def self.valid_boolean?(check)
+      (check.is_a?(TrueClass) or check.is_a?(FalseClass) or (check.is_a?(String) and ['false', 'true'].include?(check)))
+    end
+
+    # Returns +true+ if +check+ is a valid boolean value.
+    def self.valid_integer?(check)
+      (check.is_a?(Integer) or check =~ Tools::RGX_INTEGER)
+    end
+
+    # Returns +true+ if +check+ is a valid boolean value.
+    def self.valid_chmod?(check)
+      (!check.nil? and check.is_a?(String) and Tools::RGX_CHMOD =~ check)
+    end
+
     # Returns +true+ if +check+ is a valid IPv4 address.
     def self.valid_ipv4?(check)
+      ###if /\A(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\Z/ =~ addr
+      if !check.nil? and Tools::RGX_IPV4 =~ check
+        return $~.captures.all? {|i| i.to_i < 256}
+      end
+      return false
+    end
+
+    # Returns +true+ if +check+ is a valid IPv4 address.
+    def self.valid_ipv4_port?(check)
+      return (!check.nil? and Tools::RGX_IPV4_PORT =~ check)
+    end
+
+    # Returns +true+ if +check+ is a valid IPv4 address.
+    def self.valid_ipv6?(check)
       ###if /\A(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\Z/ =~ addr
       if !check.nil? and Tools::RGX_IPV4 =~ check
         return $~.captures.all? {|i| i.to_i < 256}
@@ -150,11 +222,28 @@ module DOA
     # Returns +true+ if +check+ is a valid UNIX absolute path.
     def self.valid_unix_abspath?(check)
       require 'pathname'
-      puts check
-      puts Tools::RGX_UNIX_ABSPATH
-      puts (Pathname.new check)
       return (!check.nil? and !(Tools::RGX_UNIX_ABSPATH =~ check).nil? and (Pathname.new(check)).absolute?)
-      return true
+    end
+
+    # Returns +true+ if +check+ is a valid UNIX relative path.
+    def self.valid_unix_relpath?(check)
+      require 'pathname'
+      return (!check.nil? and !(Tools::RGX_UNIX_RELPATH =~ check).nil? and (Pathname.new(check)).relative?)
+    end
+
+    # Returns +true+ if +check+ is a valid UNIX (absolute or relative) path.
+    def self.valid_unix_path?(check)
+      return (!check.nil? and !(Tools::RGX_UNIX_PATH =~ check).nil?)
+    end
+
+    # Returns +true+ if +check+ is a valid Linux package name.
+    def self.valid_linux_package_name?(check)
+      return (!check.nil? and !(Tools::RGX_LINUX_PKG_NAME =~ check).nil?)
+    end
+
+    # Returns +true+ if +check+ is a valid Linux package name.
+    def self.valid_string?(check)
+      return check.is_a?(String)
     end
 
     # Returns +true+ if +check+ is a valid port number.
@@ -173,30 +262,33 @@ module DOA
     # +allowed+:: array with the allowed subset of values; defaults to empty array [] (not taken into account)
     # +keywords+:: array with the allowed keywords; defaults to empty array [] (not taken into account)
     # +semver+:: whether to perform semver format checking or not; defaults to true
-    # +family+:: whether to perform semver + family format checking (Major.x, Major.Minor.x) or not; defaults to true
-    def self.valid_version?(check, allowed = [], keywords = [], semver = true, family = true)
+    # +branch+:: whether to perform semver + family format checking (Major.x, Major.Minor.x) or not; defaults to true
+    def self.valid_version?(check, allowed = [], keywords = [], semver = true, branch = true)
       # Check the format of the version when provided.
       # Allowed values for software version (depends on config of @@ver_format):
       #   - Specific version string (semantic versioning rules)
-      #   - Version family (5.x, 3.2.x,...)
+      #   - Version branch (5.x, 3.2.x,...)
       #   - Reserved keyword: 'latest', 'present', 'absent'
       if (!allowed.empty? and allowed.include?(check)) or
             (!keywords.empty? and keywords.include?(check)) or
-            (family and !(check =~ Tools::RGX_SEMVER_FAMILY).nil?) or
-            (semver and !(check =~ Tools::RGX_SEMVER).nil?)
+            (branch and !(check =~ Tools::RGX_SEMVER_BRANCH).nil?) or
+            (semver and !(check =~ Tools::RGX_SEMVER_VERSION).nil?)
         # SEMVER: https://github.com/jlindsey/semantic
         return true
       end
       return false
     end
+    def self.valid_semver_version?(check)
+      return valid_version?(check, [], [], true, false)
+    end
+    def self.valid_semver_branch?(check)
+      return valid_version?(check, [], [], false, true)
+    end
 
-    # Returns +true+ if +check+ is a valid port number.
+    # Returns a string with the +item+ value formatted as YAML content.
     # Params:
-    # +check+:: value to check
-    # +allowed+:: array with the allowed subset of values; defaults to empty array [] (not taken into account)
-    # +keywords+:: array with the allowed keywords; defaults to empty array [] (not taken into account)
-    # +semver+:: whether to perform semver format checking or not; defaults to true
-    # +family+:: whether to perform semver + family format checking (Major.x, Major.Minor.x) or not; defaults to true
+    # +item+:: value to format
+    # +depth+:: number of indentations at the beginning of each line
     def self.format_yaml(item, depth)
       indent = Tools::YAML_TAB * depth
       if item.is_a?(String) or item.is_a?(Integer)
@@ -211,12 +303,221 @@ module DOA
         return text
       end
     end
+
+    # Returns +true+ if +check+ is a valid URL.
+    # Params:
+    # +check+:: value to check
+    def self.valid_url?(check)
+      require 'uri'
+      check =~ /\A#{URI::regexp(['http', 'https'])}\z/
+    end
   end
 end
 
 class ::Hash
-    def deep_merge(second)
-        merger = proc { |key, v1, v2| Hash === v1 && Hash === v2 ? v1.merge(v2, &merger) : v2 }
-        self.merge(second, &merger)
+  def deep_merge(second)
+    merger = proc { |key, v1, v2| Hash === v1 && Hash === v2 ? v1.merge(v2, &merger) : v2 }
+    self.merge(second, &merger)
+  end
+  def blank?
+    self.empty?
+  end
+  def present?
+    !self.empty?
+  end
+  # Returns a hash that includes everything but the given keys.
+  #   hash = { a: true, b: false, c: nil}
+  #   hash.except(:c) # => { a: true, b: false}
+  #   hash # => { a: true, b: false, c: nil}
+  #
+  # This is useful for limiting a set of parameters to everything but a few known toggles:
+  #   @person.update(params[:person].except(:admin))
+  # Author: Beerlington
+  # See: http://stackoverflow.com/questions/6227600/how-to-remove-a-key-from-hash-and-get-the-remaining-hash-in-ruby-rails
+  def except(*keys)
+    dup.except!(*keys)
+  end
+
+  # Replaces the hash without the given keys.
+  #   hash = { a: true, b: false, c: nil}
+  #   hash.except!(:c) # => { a: true, b: false}
+  #   hash # => { a: true, b: false }
+  # Author: Beerlington
+  # See: http://stackoverflow.com/questions/6227600/how-to-remove-a-key-from-hash-and-get-the-remaining-hash-in-ruby-rails
+  def except!(*keys)
+    keys.each { |key| delete(key) }
+    self
+  end
+
+  def recursive_set!(keys, value)
+    key = keys.shift
+    if !keys.empty?
+      self[key].recursive_set!(keys, value)
+    else
+      self[key] = value
     end
+    true
+  end
+end
+
+class ::String
+  def is_integer?
+    self.match(/^\-?[0-9]+$/)
+  end
+  def is_positive_integer?
+    if !self.is_integer?
+      return nil
+    elsif self.to_i > 0
+      return true
+    else
+      return false
+    end
+  end
+  def is_negative_integer?
+    if !self.is_integer?
+      return nil
+    elsif self.to_i < 0
+      return true
+    else
+      return false
+    end
+  end
+  def is_nonpositive_integer?
+    if !self.is_integer?
+      return nil
+    elsif self.to_i <= 0
+      return true
+    else
+      return false
+    end
+  end
+  def is_nonnegative_integer?
+    if !self.is_integer?
+      return nil
+    elsif self.to_i >= 0
+      return true
+    else
+      return false
+    end
+  end
+  def is_float?
+    self.match(/^(\-?[0-9]+(\.[0-9]*)?|\-?\.[0-9]+)$/)
+  end
+  def is_positive_float?
+    if !self.is_float?
+      return nil
+    elsif self.to_i > 0
+      return true
+    else
+      return false
+    end
+  end
+  def is_negative_float?
+    if !self.is_float?
+      return nil
+    elsif self.to_i < 0
+      return true
+    else
+      return false
+    end
+  end
+  def is_nonpositive_float?
+    if !self.is_float?
+      return nil
+    elsif self.to_i <= 0
+      return true
+    else
+      return false
+    end
+  end
+  def is_nonnegative_float?
+    if !self.is_float?
+      return nil
+    elsif self.to_i >= 0
+      return true
+    else
+      return false
+    end
+  end
+  def is_numeric?
+    self.is_float?
+  end
+  def blank?
+    self.strip.empty?
+  end
+  def present?
+    !self.blank?
+  end
+end
+
+class ::NilClass
+  def empty?
+    true  # Exception
+  end
+  def blank?
+    true
+  end
+  def present?
+    false
+  end
+end
+
+class ::FalseClass
+  def empty?
+    false  # Exception
+  end
+  def blank?
+    true
+  end
+  def present?
+    false
+  end
+end
+
+class ::TrueClass
+  def empty?
+    false  # Exception
+  end
+  def blank?
+    false
+  end
+  def present?
+    true
+  end
+end
+
+class ::Array
+  def empty?
+    (self.reject { |e| e.respond_to?('empty?') ? e.empty? : false }).size == 0
+  end
+  def blank?
+    (self.reject { |e| e.blank? }).size == 0
+  end
+  def present?
+    !self.blank?
+  end
+end
+
+class ::Fixnum
+  def empty?
+    false  # Exception
+  end
+  def blank?
+    false
+  end
+  def present?
+    true
+  end
+end
+
+class ::Float
+  def empty?
+    false  # Exception
+  end
+  def blank?
+    false
+  end
+  def present?
+    true
+  end
 end

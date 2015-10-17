@@ -1,4 +1,14 @@
 forge "https://forgeapi.puppetlabs.com"
 
-<% @@puppetfile_mods.each do |mod_id, trash| %>mod '<%= mod_id %>'
-<% end %>
+<%
+@@puppetfile_mods.each do |mod, config|
+  version  = config.has_key?(:ver) ? config[:ver] : nil
+  config.except!(:ver)
+  last_key = config.keys.last if !config.empty?
+%>mod '<%= mod %>'<%= version.blank? ? '' : ", #{ version }" %><%= config.blank? ? '' : ',' %>
+<% config.except!(:ver).each do |key, value|
+    if !LIBRARIAN_MAP[key].nil? %>  :<%= LIBRARIAN_MAP[key].to_s %> => '<%= value %>'<%= key != last_key ? ',' : '' %>
+<%  end # if no :ver key
+  end # each config
+end # each puppetfile_mods
+%>

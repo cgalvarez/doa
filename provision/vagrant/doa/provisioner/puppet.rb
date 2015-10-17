@@ -2,6 +2,7 @@
 
 require 'singleton'
 require_relative 'puppet/couchdb'
+require_relative 'puppet/mariadb'
 require_relative 'puppet/meteor'
 require_relative 'puppet/php'
 
@@ -19,8 +20,14 @@ module DOA
         'architecture' => '"%{::architecture}"',
         'release'      => '"%{::lsbdistcodename}"',
         'repos'        => "'main'",
-        'key'          => {'server'     => "'keyserver.ubuntu.com'"},
-        'pin'          => "'700'",
+        'key'          => {'server' => "'keyserver.ubuntu.com'"},
+      }
+      LIBRARIAN_MAP = {
+          :git  => :git,
+          :path => :path,
+          :ref  => :ref,
+          :tar  => :github_tarball,
+          :ver  => nil,
       }
 
       CONFDIR = '/etc/puppetlabs/puppet'
@@ -30,149 +37,53 @@ module DOA
       MANIFESTS_DIR = "#{ DOA::Guest::PROVISION }/manifests"
 
       # 3rd party puppet modules
-      PUPPET_FORGE_ID_GLUE = '/'
-      PUPPET_FORGE_MOD_APT = 'puppetlabs/apt'
+      PF_ID_GLUE  = '/'
+      PF_RES_GLUE = '::'
+      PF_MOD_APT  = 'puppetlabs/apt'
+      DOA_MOD_APT  = 'cgalvarez/apthelper'
 
       # Class variables
       @@sw_stack        = {}
       @@puppetfile_mods = {}
       @@hiera_classes   = {}
       @@relationships   = {}
+      @@site_content    = []
       @@current_site    = nil
       @@current_sw      = nil
+      @@current_stack   = nil
+      @@os_family       = nil
+      @@os_distro       = nil
+      @@os_distro_ver   = nil
 
       # Getters
       def self.current_site
         @@current_site
       end
+      def current_site
+        @@current_site
+      end
       def self.sw_stack
         @@sw_stack
       end
-
-      # Adds the provided classes to the list of classes automatically loaded
-      # through Puppet Hiera.
-      # +classes+:: array of strings with the name of the classes to load with Hiera
-      def self.enqueue_hiera_classes(classes)
-        # +classes+: wrong type
-        if !classes.is_a?(Array)
-          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-            @@current_site, @@current_sw, 'classes', 'Array', 'Puppet#enqueue_hiera_classes').colorize(:red)
-          raise SystemExit
-        else
-          classes.each do |class_name|
-            # +classes+: malformed (values of wrong type)
-            if !class_name.is_a?(String)
-              puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-                @@current_site, @@current_sw, 'classes', 'Puppet#enqueue_hiera_classes').colorize(:red)
-              raise SystemExit
-            end
-            @@hiera_classes[class_name] = true if !@@hiera_classes.has_key?(class_name)
-          end
-        end
+      def self.current_stack
+        @@current_stack
       end
-
-      # Adds the provided modules to the list of external modules automatically
-      # managed my librarian-puppet from Puppet Forge.
-      # +mods+:: array of strings with the Puppet Forge identifiers of the modules to manage with librarian-puppet
-      def self.enqueue_puppetfile_mods(mods)
-        # +mods+: wrong type
-        if !mods.is_a?(Array)
-          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-            @@current_site, @@current_sw, 'mods', 'Array', 'Puppet#enqueue_puppetfile_mods').colorize(:red)
-          raise SystemExit
-        else
-          mods.each do |mod|
-            # +mods+: malformed (values of wrong type)
-            if !mod.is_a?(String) || !mod.include?(PUPPET_FORGE_ID_GLUE)
-              puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-                @@current_site, @@current_sw, 'mods', 'Puppet#enqueue_puppetfile_mods').colorize(:red)
-              raise SystemExit
-            end
-            @@puppetfile_mods[mod] = true if !@@puppetfile_mods.has_key?(mod)
-          end
-        end
+      def self.os_family
+        @@os_family
       end
-
-      # Adds the provided APT repositories (Debian Linux family) to the list of
-      # repositories automatically managed with Puppet Hiera.
-      # +label+:: string with the name to assign to the repository
-      # +settings+:: hash with the requested settings for setting the repository up (required keys {ensure|comment|location|key|before}
-      # +relationships+:: hash with the requested relationships; see Puppet#enqueue_relationship
-      def self.enqueue_repo_apt(label, settings, relationships = nil)
-        # +label+: wrong type
-        if !label.is_a?(String)
-          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-            @@current_site, @@current_sw, 'label', 'String', 'Puppet#enqueue_repo_apt').colorize(:red)
-          raise SystemExit
-        # +settings+: wrong type
-        elsif !settings.is_a?(Hash)
-          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-            @@current_site, @@current_sw, 'settings', 'Hash', 'Puppet#enqueue_repo_apt').colorize(:red)
-          raise SystemExit
-        # +settings+: missing required keys or values of wrong type
-        elsif !settings.has_key?('ensure') || !settings['ensure'].is_a?(String) ||
-            !settings.has_key?('comment') || !settings['comment'].is_a?(String) ||
-            !settings.has_key?('location') || !settings['location'].is_a?(String) ||
-            !settings.has_key?('key') || !settings['key'].is_a?(Hash) ||
-            !settings['key'].has_key?('id') || !settings['key']['id'].is_a?(String)
-          puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_SITE, DOA::Guest.sh_header, DOA::Guest.hostname,
-            @@current_site, @@current_sw, 'settings', 'Puppet#enqueue_repo_apt').colorize(:red)
-          raise SystemExit
-        # +relationships+: wrong type
-        elsif !relationships.nil? and !relationships.is_a?(Hash)
-          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header,
-            DOA::Guest.hostname, @@current_site, @@current_sw, 'relationships', 'Hash').colorize(:red)
-          raise SystemExit
-        # Enqueue module parameters for Hiera
-        else
-          pkg_mngr = 'apt'
-          escaped_label = label.gsub('.', '_')
-          @@puppetfile_mods[PUPPET_FORGE_MOD_APT] = true if !@@puppetfile_mods.has_key?(PUPPET_FORGE_MOD_APT)
-          @@hiera_classes[PUPPET_FORGE_MOD_APT] = false if !@@hiera_classes.has_key?(PUPPET_FORGE_MOD_APT)
-          @@sw_stack[pkg_mngr] = {} if !@@sw_stack.has_key?(pkg_mngr)
-          @@sw_stack[pkg_mngr]['sources'] = {} if !@@sw_stack[pkg_mngr].has_key?('sources')
-          @@sw_stack[pkg_mngr]['sources']["'#{ escaped_label }'"] = PPA_DEFAULTS.deep_merge(settings)
-          enqueue_relationship("Apt::Source['#{ escaped_label }']", relationships) if !relationships.nil? and !relationships.empty?
-        end
+      def self.os_distro
+        @@os_distro
       end
-
-      # Generates and adds the chaining arrows for the requested relationships.
-      # +source+:: source reference (the +relationships+ values are the targets)
-      # +relationships+:: hash of strings with the requested relationships; Possible keys: {before|require|notify|subcribe}
-      def self.enqueue_relationship(source, relationships)
-        # Set the appropriate relationships through chaining arrows when requested
-        if !relationships.nil? and !relationships.empty?
-          relationships.each do |relationship, target|
-            # +relationships+: malformed (values of wrong type)
-            if !target.is_a?(String)
-              puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-                @@current_site, @@current_sw, 'relationships', 'Puppet#enqueue_relationship').colorize(:red)
-              raise SystemExit
-            end
-            chaining =
-              case relationship
-              when 'before' then "#{ source } -> #{ target }"
-              when 'require' then "#{ target } -> #{ source }"
-              when 'notify' then "#{ source } ~> #{ target }"
-              when 'subcribe' then "#{ target } ~> #{ source }"
-              else ''
-              end
-            # +relationships+: malformed (disallowed keys)
-            if chaining.empty?
-              puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-                @@current_site, @@current_sw, 'relationships', 'Puppet#enqueue_relationship').colorize(:red)
-              raise SystemExit
-            else
-              @@relationships[chaining] = true if !@@relationships.has_key?(chaining)
-            end
-          end
-        end
+      def self.os_distro_ver
+        @@os_distro_ver
       end
 
       # Creates the puppet files needed for provisioning the guest machine according to the YAML settings.
       def self.setup_provision()
         # Initialize all class variables
         @@puppetfile_mods, @@sw_stack, @@hiera_classes, @@relationships = {}, {}, {}, {}
+        @@current_site, @@current_sw, @@current_stack = nil, nil, nil
+        @@os_family, @@os_distro, @@os_distro_ver = Puppet.os_info(OS_FAMILY), Puppet.os_info(OS_DISTRO), Puppet.os_info(OS_DISTRO_VER)
 
         printf(DOA::L10n::SETTING_UP_PROVISIONER, DOA::Guest.sh_header, TYPE, DOA::Guest.hostname)
         sites = DOA::Tools.check_get(DOA::Guest.settings, DOA::Tools::TYPE_HASH,
@@ -183,19 +94,21 @@ module DOA
           @@current_site  = site
           stack = DOA::Tools.check_get(site_settings, DOA::Tools::TYPE_HASH,
             [DOA::Guest.hostname, @@current_site, Setting::SITE_STACK], Setting::SITE_STACK, {})
+          @@current_stack = stack
 
           # LOOP software stack
           stack.each do |sw, sw_settings|
             @@current_sw = sw
-            @@sw_stack[sw] = {}
             sw_mod =
               case sw
               when Setting::SW_COUCHDB then 'CouchDB'
+              when Setting::SW_MARIADB then 'MariaDB'
               when Setting::SW_METEOR then 'Meteor'
               when Setting::SW_PHP then 'PHP'
               end
-            if Puppet.const_defined?(sw_mod) and Puppet.const_get(sw_mod).respond_to?('setup')
-              Puppet.const_get(sw_mod).send('setup', sw_settings)
+            if Puppet.const_defined?(sw_mod) and (subclass = Puppet.const_get(sw_mod)).is_a?(Class) and
+                subclass < PuppetModule and subclass.respond_to?('setup')
+              subclass.send('setup', sw_settings)
             else
               puts sprintf(DOA::L10n::UNSUPPORTED_SW, DOA::Guest.sh_header,
                 DOA::Guest.hostname, @@current_site, sw).colorize(:red)
@@ -279,14 +192,14 @@ module DOA
         ])
         puts DOA::L10n::SUCCESS_OK
 
-        printf(DOA::L10n::PROVISIONING_STACK, DOA::Guest.sh_header, DOA::Guest.hostname, TYPE)
+        #printf(DOA::L10n::PROVISIONING_STACK, DOA::Guest.sh_header, DOA::Guest.hostname, TYPE)
         DOA::Guest.ssh([
           "cd #{ CONFDIR }",
-          #"sudo r10k puppetfile install",    # Download the 3rd party modules into the guest machine
+        #  #"sudo r10k puppetfile install",    # Download the 3rd party modules into the guest machine
           "sudo librarian-puppet update",     # Download the 3rd party modules (and their deps) into the guest machine
-          "papply",                           # Execute provisioning
+        #  #"papply",                           # Execute provisioning
         ])
-        puts DOA::L10n::SUCCESS_OK
+        #puts DOA::L10n::SUCCESS_OK
       end
 
       # Returns some info about the guest machine, retrieved through Puppet Facter.
@@ -310,6 +223,229 @@ module DOA
           DOA::Guest.send("set_#{ param }", req_info) if !req_info.nil?
         end
         return req_info
+      end
+
+      # Adds the provided classes to the list of classes automatically loaded
+      # through Puppet Hiera.
+      # +classes+:: array of strings with the name of the classes to load with Hiera
+      def self.enqueue_hiera_classes(classes)
+        classes = [classes] if !classes.is_a?(Array)
+          classes.each do |class_name|
+            # +classes+: malformed (values of wrong type)
+            if !class_name.is_a?(String)
+              puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+                @@current_site, @@current_sw, 'classes', 'Puppet#enqueue_hiera_classes').colorize(:red)
+              raise SystemExit
+            end
+            @@hiera_classes[class_name] = true if !@@hiera_classes.has_key?(class_name)
+          end
+        ###end
+      end
+
+      # Adds the provided modules to the list of external modules automatically
+      # managed my librarian-puppet.
+      # +mods+:: hash with module ID and its settings for it to be managed by librarian-puppet
+      def self.enqueue_librarian_mods(mods)
+        # +mods+: wrong type
+        if !mods.is_a?(Hash)
+          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+            @@current_site, @@current_sw, 'mods', 'Hash', 'Puppet#enqueue_librarian_mods').colorize(:red)
+          raise SystemExit
+        end
+        mods.each do |mod, settings|
+          # +settings+: wrong type
+          if !settings.is_a?(Hash)
+            puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+              @@current_site, @@current_sw, 'settings', 'Hash', 'Puppet#enqueue_librarian_mods').colorize(:red)
+            raise SystemExit
+          end
+          has = {}
+          [:git, :path, :ref, :tar, :ver].each do |param|
+            settings.except!(param) if settings.has_key?(param) and settings[param].is_a?(String) and settings[param].blank?
+            has[param] = settings.has_key?(param)
+          end
+          # Check possible combinations of settings
+          if settings.empty? or
+              (has[:git] and !has[:path] and !has[:ref] and !has[:tar] and !has[:ver]) or   # mod + :git
+              (has[:git] and has[:path] and !has[:ref] and !has[:tar] and !has[:ver]) or    # mod + :git + :path
+              (has[:git] and !has[:path] and has[:ref] and !has[:tar] and !has[:ver]) or    # mod + :git + :ref
+              (has[:git] and !has[:path] and !has[:ref] and !has[:tar] and has[:ver]) or    # mod + :git + :ver (:ver => :ref)
+              (!has[:git] and !has[:path] and !has[:ref] and !has[:tar] and has[:ver]) or   # mod + :ver
+              (!has[:git] and !has[:path] and !has[:ref] and has[:tar] and has[:ver]) or    # mod + :ver + :tar
+              (!has[:git] and has[:path] and !has[:ref] and !has[:tar] and !has[:ver])      # mod + :path
+            if !settings.empty? and has[:git] and !has[:path] and !has[:ref] and !has[:tar] and has[:ver]
+              settings[:ref] = settings[:ver]
+              settings.except!(:ver)
+            end
+            @@puppetfile_mods = @@puppetfile_mods.deep_merge({mod => settings})
+          # Incompatible settings for librarian-puppet module
+          else
+            puts sprintf(DOA::L10n::INCOMPAT_SETTINGS_LIBRARIAN_MOD, DOA::Guest.sh_header, @@current_sw).colorize(:red)
+            raise SystemExit
+          end
+        end
+      end
+
+      # Adds the provided APT repositories (Debian Linux family) to the list of
+      # repositories automatically managed with Puppet Hiera.
+      # +label+:: string with the name to assign to the repository
+      # +settings+:: hash with the requested settings for setting the repository up (required keys {ensure|comment|location|key|before}
+      # +relationships+:: hash with the requested relationships; see Puppet#enqueue_relationship
+      # +puppetfile_mods+:: hash with modules to autoload with librarian-puppet
+      # +hiera_classes+:: array with classes to autoload with Puppet Hiera
+      def self.enqueue_apt_hiera_settings(modclass, modparam, label, settings, relationships = nil, puppetfile_mods = nil, hiera_classes = nil)
+        hiera_classes = [hiera_classes] if !hiera_classes.is_a?(Array)
+
+        # +label+: wrong type
+        if !label.is_a?(String)
+          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+            @@current_site, @@current_sw, 'label', 'String', 'Puppet#enqueue_apt_hiera_settings').colorize(:red)
+          raise SystemExit
+        # +settings+: wrong type
+        elsif !settings.is_a?(Hash)
+          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+            @@current_site, @@current_sw, 'settings', 'Hash', 'Puppet#enqueue_apt_hiera_settings').colorize(:red)
+          raise SystemExit
+        # +relationships+: wrong type
+        elsif !relationships.nil? and !relationships.is_a?(Hash)
+          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header,
+            DOA::Guest.hostname, @@current_site, @@current_sw, 'relationships', 'Hash').colorize(:red)
+          raise SystemExit
+        # Enqueue module parameters for Hiera
+        else
+          enqueue_librarian_mods(puppetfile_mods) if !puppetfile_mods.empty?
+          enqueue_hiera_classes(hiera_classes) if !hiera_classes.empty?
+          enqueue_hiera_params('APT Package Manager', {"#{ modclass }::#{ modparam }" => settings}) if !settings.empty?
+          rel_class = case modparam
+            when 'sources' then 'Source'
+            when 'pins' then 'Pin'
+            else modparam.capitalize
+            end
+          enqueue_relationship("Apt::#{ rel_class }[#{ settings.keys[0] }]", relationships) if !relationships.empty?
+        end
+      end
+
+      # Adds the provided APT repositories (Debian Linux family) to the list of
+      # repositories automatically managed with Puppet Hiera.
+      # +label+:: string with the name to assign to the repository
+      # +settings+:: hash with the requested settings for setting the repository up (required keys {ensure|comment|location|key|before}
+      # +relationships+:: hash with the requested relationships; see Puppet#enqueue_relationship
+      def self.enqueue_apt_repo(label, settings, relationships = nil)
+        # +settings+: wrong type
+        if !settings.is_a?(Hash)
+          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+            @@current_site, @@current_sw, 'settings', 'Hash', 'Puppet#enqueue_apt_repo').colorize(:red)
+          raise SystemExit
+        # +settings+: missing required keys or values of wrong type
+        elsif !settings.has_key?('ensure') || !settings['ensure'].is_a?(String) ||
+            !settings.has_key?('comment') || !settings['comment'].is_a?(String) ||
+            !settings.has_key?('location') || !settings['location'].is_a?(String) ||
+            !settings.has_key?('key') || !settings['key'].is_a?(Hash) ||
+            !settings['key'].has_key?('id') || !settings['key']['id'].is_a?(String)
+          puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_SITE, DOA::Guest.sh_header, DOA::Guest.hostname,
+            @@current_site, @@current_sw, 'settings', 'Puppet#enqueue_apt_repo').colorize(:red)
+          raise SystemExit
+        else
+          ###settings.each { |k, v| settings[k] = v.deep_merge(PPA_DEFAULTS) }
+          enqueue_apt_hiera_settings('apt', 'sources', label, {"'#{ label }'" => settings.deep_merge(PPA_DEFAULTS)}, relationships, [PF_MOD_APT], [PF_MOD_APT])
+        end
+      end
+
+      # Adds the provided APT pins (Debian Linux family) to hold a version/branch
+      # of a specific software, automatically managed with Puppet Hiera (through
+      # custom module apthelper).
+      # +label+:: string with the name to assign to the repository
+      # +settings+:: hash with the requested settings for setting the repository up (required keys {ensure|comment|location|key|before}
+      # +relationships+:: hash with the requested relationships; see Puppet#enqueue_relationship
+      # Example:
+      #    enqueue_apt_pin('mariadb', {
+      #      'packages' => "'mariadb-server'",
+      #      'version'  => "'5.5.36'",
+      #      'ensure'   => "'held'",
+      #    }, {'before' => "Class['mariadb']"})
+      def self.enqueue_apt_pin(label, settings, relationships = nil)
+        # +settings+: wrong type
+        if !settings.is_a?(Hash)
+          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+            @@current_site, @@current_sw, 'settings', 'Hash', 'Puppet#enqueue_apt_pin').colorize(:red)
+          raise SystemExit
+        # +settings+: missing required keys or values of wrong type
+        elsif !settings.has_key?('ensure') || !settings['ensure'].is_a?(String) ||
+            !settings.has_key?('packages') || !settings['packages'].is_a?(String) ||
+            !settings.has_key?('version') || !settings['version'].is_a?(String)
+            #!settings.has_key?('priority') || !(settings['priority'].is_a?(Integer) || settings['priority'].is_a?(String))
+          puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_SITE, DOA::Guest.sh_header, DOA::Guest.hostname,
+            @@current_site, @@current_sw, 'settings', 'Puppet#enqueue_apt_pin').colorize(:red)
+          raise SystemExit
+        else
+          enqueue_apt_hiera_settings('apthelper', 'pins', label, {
+              "'hold_#{ label.downcase.gsub(/\./, '_') }'" => settings,
+            }, relationships, PF_MOD_APT, [PF_MOD_APT, DOA_MOD_APT])
+        end
+      end
+
+      # Generates and adds the chaining arrows for the requested relationships.
+      # +source+:: source reference (the +relationships+ values are the targets)
+      # +relationships+:: hash of strings with the requested relationships; Possible keys: {before|require|notify|subcribe}
+      def self.enqueue_relationship(source, relationships)
+        # Set the appropriate relationships through chaining arrows when requested
+        if !relationships.nil? and !relationships.empty?
+          relationships.each do |relationship, target|
+            # +relationships+: malformed (values of wrong type)
+            if !target.is_a?(String)
+              puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+                @@current_site, @@current_sw, 'relationships', 'Puppet#enqueue_relationship').colorize(:red)
+              raise SystemExit
+            end
+            chaining =
+              case relationship
+              when 'before' then "#{ source } -> #{ target }"
+              when 'require' then "#{ target } -> #{ source }"
+              when 'notify' then "#{ source } ~> #{ target }"
+              when 'subcribe' then "#{ target } ~> #{ source }"
+              else ''
+              end
+            # +relationships+: malformed (disallowed keys)
+            if chaining.empty?
+              puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+                @@current_site, @@current_sw, 'relationships', 'Puppet#enqueue_relationship').colorize(:red)
+              raise SystemExit
+            else
+              @@relationships[chaining] = true if !@@relationships.has_key?(chaining)
+            end
+          end
+        end
+      end
+
+      # Insert content into the guest manifest.
+      # +content+:: string with the content to append to 'site.pp' manifest
+      def self.enqueue_site_content(content)
+        # Set the appropriate relationships through chaining arrows when requested
+        if content.nil? or !content.is_a?(String)
+          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+            @@current_site, @@current_sw, 'content', 'String', 'Puppet#enqueue_site_content').colorize(:red)
+          raise SystemExit
+        elsif content.present?
+          @@site_content.insert(-1, content) if !content.empty?
+        end
+      end
+
+      # Generates and adds the chaining arrows for the requested relationships.
+      # +sw_label+:: key representing the section to insert the parameters into
+      # +params+:: hash with the Hiera parameters to append
+      def self.enqueue_hiera_params(sw_label, params)
+        # Set the appropriate relationships through chaining arrows when requested
+        if params.nil? or !params.is_a?(Hash)
+          puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
+            @@current_site, @@current_sw, 'content', 'String', 'Puppet#enqueue_hiera_params').colorize(:red)
+          raise SystemExit
+        elsif !params.empty?
+          if @@sw_stack[sw_label].empty?
+            @@sw_stack[sw_label] = params
+          else
+            @@sw_stack[sw_label] = @@sw_stack[sw_label].deep_merge(params)
+          end
+        end
       end
     end
   end

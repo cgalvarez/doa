@@ -3,6 +3,7 @@
 module DOA
   class Setting
     # Guest machine
+    ENVIRONMENT       = 'env'
     HOSTNAME          = 'hostname'
     PROVIDER          = 'provider'
     PROVISIONER       = 'provisioner'

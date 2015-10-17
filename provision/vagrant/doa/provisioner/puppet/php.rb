@@ -1,22 +1,445 @@
 #!/usr/bin/ruby
 
+require_relative 'puppet_module'
+
 module DOA
   module Provisioner
     class Puppet
-      module PHP
-        # Constants
-        SW = Setting::SW_PHP
-        PUPPET_FORGE_MOD = 'mayflower/php'
-        SUPPORTED = {
-          'version'                 => 'latest',
-          'fpm'                     => 'true',
-          'dev'                     => 'true',
-          'composer'                => 'true',
-          'pear'                    => 'true',
-          'phpunit'                 => 'true',
-          'fpm::config::log_level'  => 'notice',
-          'composer::auto_update'   => 'true',
+      class PHP < PuppetModule
+        # Constants.
+        MOD_MAYFLOWER_PHP = 'mayflower/php'
+
+        # Class variables.
+        @label        = 'PHP'
+        @hieraclasses = ['php']
+        @librarian    = {
+          MOD_MAYFLOWER_PHP => {},
         }
+
+        # Puppet modules parameters.
+        # mayflower/php => https://github.com/mayflower/puppet-php
+        @supported = {
+            'core' => {
+              :children   => {
+                'ensure' => {
+                  :expect     => [:string],
+                  :allow      => ['absent', 'purged', 'present', 'installed', 'latest', 'held'],
+                  :maps_to     => 'php::ensure',
+                  :mod_def    => 'latest',
+                  :doa_def    => {
+                    :dev      => 'latest',
+                    :test     => 'latest',
+                    :prod     => 'present',
+                  },
+                },
+              },
+            },
+            'fpm' => {
+              :maps_to    => 'php::fpm',
+              :cb_process => "#{ self.to_s }#set_hiera_param@fpm",
+              :mod_def    => 'true',
+              :children   => {
+                'ensure' => {
+                  :expect     => [:string],
+                  :allow      => ['absent', 'purged', 'present', 'installed', 'latest', 'held'],
+                  :maps_to    => 'php::fpm::ensure',
+                  :mod_def    => 'latest',
+                  :doa_def    => {
+                    :dev      => 'latest',
+                    :test     => 'latest',
+                    :prod     => 'present',
+                  },
+                },
+                'config' => {
+                  :children  => {
+                    'config_file' => {
+                      :expect     => [:unix_abspath],
+                      :maps_to    => 'php::fpm::config::config_file',
+                      :mod_def    => {
+                        'debian'  => '/etc/php5/fpm/php-fpm.conf',
+                        'suse'    => '/etc/php5/fpm/php-fpm.conf',
+                        'redhat'  => '/etc/php-fpm.conf',
+                        'freebsd' => '/usr/local/etc/php-fpm.conf',
+                      },
+                    },
+                    'user' => {
+                      :expect     => [:string],
+                      :maps_to    => 'php::fpm::config::user',
+                      :mod_def    => {
+                        'debian'  => 'www-data',
+                        'suse'    => 'wwwrun',
+                        'redhat'  => 'apache',
+                        'freebsd' => 'www',
+                      },
+                    },
+                    'group' => {
+                      :expect     => [:string],
+                      :maps_to    => 'php::fpm::config::group',
+                      :mod_def    => {
+                        'debian'  => 'www-data',
+                        'suse'    => 'www',
+                        'redhat'  => 'apache',
+                        'freebsd' => 'www',
+                      },
+                    },
+                    'root_group' => {
+                      :expect     => [:string],
+                      :maps_to    => 'php::fpm::config::root_group',
+                      :mod_def    => {
+                        'debian'  => 'root',
+                        'suse'    => 'root',
+                        'redhat'  => 'root',
+                        'freebsd' => 'wheel',
+                      },
+                    },
+                    'inifile' => {
+                      :expect     => [:string],
+                      :maps_to    => 'php::fpm::config::inifile',
+                      :mod_def    => {
+                        'debian'  => '/etc/php5/fpm/php.ini',
+                        'suse'    => '/etc/php5/fpm/php.ini',
+                        'redhat'  => '/etc/php.ini',
+                        'freebsd' => '/usr/local/etc/php.ini',
+                      },
+                    },
+                    'settings' => {
+                      :expect     => [:hash],
+                      :maps_to    => 'php::fpm::config::settings',
+                      :mod_def    => '{}',
+                    },
+                    'pool' => {
+                      :children  => {
+                        'base_dir' => {
+                          :expect     => [:unix_abspath],
+                          :maps_to    => 'php::fpm::config::pool_base_dir',
+                          :mod_def    => {
+                            'debian'  => '/etc/php5/fpm/pool.d',
+                            'suse'    => '/etc/php5/fpm/pool.d',
+                            'redhat'  => '/etc/php-fpm.d',
+                            'freebsd' => '/usr/local/etc/php-fpm.d',
+                          },
+                        },
+                        'purge' => {
+                          :expect     => [:boolean],
+                          :maps_to    => 'php::fpm::config::pool_purge',
+                          :mod_def    => 'false',
+                        },
+                      },
+                    },
+                    'emergency' => {
+                      :children  => {
+                        'restart_threshold' => {
+                          :expect     => [:integer],
+                          :maps_to    => 'php::fpm::config::emergency_restart_threshold',
+                          :mod_def    => '0',
+                        },
+                        'restart_interval' => {
+                          :expect     => [:string], # TODO: Improve (http://php.net/manual/en/install.fpm.configuration.php#emergency-restart-interval)
+                          :maps_to    => 'php::fpm::config::emergency_restart_interval',
+                          :mod_def    => '0',
+                        },
+                      },
+                    },
+                    'log' => {
+                      :children  => {
+                        'level' => {
+                          :expect     => [:string],
+                          :allow      => ['alert', 'error', 'warning', 'notice', 'debug'],
+                          :maps_to    => 'php::fpm::config::log_level',
+                          :mod_def    => 'notice',
+                        },
+                        'owner' => {
+                          :expect     => [:string],
+                          :maps_to    => 'php::fpm::config::log_owner',
+                          :mod_def    => {
+                            'debian'  => 'www-data',
+                            'suse'    => 'wwwrun',
+                            'redhat'  => 'apache',
+                            'freebsd' => 'www',
+                          },
+                        },
+                        'group' => {
+                          :expect     => [:string],
+                          :maps_to    => 'php::fpm::config::log_group',
+                          :mod_def    => {
+                            'debian'  => 'www-data',
+                            'suse'    => 'www',
+                            'redhat'  => 'apache',
+                            'freebsd' => 'www',
+                          },
+                        },
+                        'dir_mode' => {
+                          :expect     => [:chmod],
+                          :maps_to    => 'php::fpm::config::log_dir_mode',
+                          :mod_def    => '0770',
+                        },
+                      },
+                    },
+                  },
+                },
+                'pools' => {
+                  :maps_to    => 'php::fpm::pools',
+                  :children_hash  => {
+                    'ensure' => {
+                      :expect     => [:string],
+                      :allow      => ['absent', 'present'],
+                      :mod_def    => 'present',
+                    },
+                    'user' => {
+                      :expect     => [:string],
+                      :mod_def    => {
+                        'debian'  => 'www-data',
+                        'suse'    => 'wwwrun',
+                        'redhat'  => 'apache',
+                        'freebsd' => 'www',
+                      },
+                    },
+                    'listen' => {
+                      :children => {
+                        'socket' => {
+                          :expect     => [:ipv4_port, :unix_abspath],
+                          :maps_to    => 'listen',
+                          :mod_def    => '127.0.0.1:9000',
+                          :doa_def    => {
+                            'debian'  => '/var/run/php5-fpm.sock',
+                          },
+                        },
+                        'backlog' => {
+                          :expect     => [:string],
+                          :maps_to    => 'listen_backlog',
+                          :mod_def    => '-1',
+                        },
+                        'allowed_clients' => {
+                          :expect     => [:ipv4],
+                          :maps_to    => 'listen_allowed_clients',
+                          :mod_def    => '-1',
+                        },
+                        'owner' => {
+                          :expect     => [:string],
+                          :maps_to    => 'listen_owner',
+                        },
+                        'group' => {
+                          :expect     => [:string],
+                          :maps_to    => 'listen_group',
+                        },
+                        'mode' => {
+                          :expect     => [:chmod],
+                          :maps_to    => 'listen_mode',
+                          :mod_def    => '0660',
+                        },
+                      },
+                    },
+                    'pm' => { # PM (Process Manager) control
+                      :children => {
+                        'mode' => {
+                          :expect     => [:string],
+                          :allow      => ['static', 'ondemand', 'dynamic'],
+                          :maps_to    => 'pm',
+                          :mod_def    => 'dynamic',
+                        },
+                        'max_children' => {
+                          :expect     => [:string],
+                          :maps_to    => 'pm_max_children',
+                          :mod_def    => '50',
+                        },
+                        'start_servers' => {
+                          :expect     => [:string],
+                          :maps_to    => 'pm_start_servers',
+                          :mod_def    => '5',
+                        },
+                        'min_spare_servers' => {
+                          :expect     => [:string],
+                          :maps_to    => 'pm_min_spare_servers',
+                          :mod_def    => '5',
+                        },
+                        'max_spare_servers' => {
+                          :expect     => [:string],
+                          :maps_to    => 'pm_max_spare_servers',
+                          :mod_def    => '35',
+                        },
+                        'max_requests' => {
+                          :expect     => [:string],
+                          :maps_to    => 'pm_max_requests',
+                          :mod_def    => '0',
+                        },
+                        'status_path' => {
+                          :expect     => [:uri],
+                          :maps_to    => 'pm_status_path',
+                        },
+                      },
+                    },
+                    'ping' => {
+                      :children => {
+                        'path' => {
+                          :expect     => [:unix_abspath],
+                          :maps_to    => 'ping_response',
+                        },
+                        'response' => {
+                          :expect     => [:string],
+                          :maps_to    => 'ping_response',
+                          :mod_def    => 'pong',
+                        },
+                      },
+                    },
+                    'request' => {
+                      :children => {
+                        'terminate_timeout' => {
+                          :expect     => [:string],
+                          :maps_to    => 'request_terminate_timeout',
+                          :mod_def    => '0',
+                        },
+                        'slowlog_timeout' => {
+                          :expect     => [:string],
+                          :maps_to    => 'request_slowlog_timeout',
+                          :mod_def    => '0',
+                        },
+                      },
+                    },
+                    'rlimit' => {
+                      :children => {
+                        'files' => {
+                          :expect     => [:string],
+                          :maps_to    => 'rlimit_files',
+                        },
+                        'core' => {
+                          :expect     => [:string],
+                          :maps_to    => 'rlimit_core',
+                        },
+                      },
+                    },
+                    # See http://php.net/manual/en/install.fpm.configuration.php#example-73
+                    'php' => {
+                      :children => {
+                        'value' => {
+                          :expect     => [:hash_values],
+                          :maps_to    => 'php_value',
+                        },
+                        'flag' => {
+                          :expect     => [:hash_flags],
+                          :maps_to    => 'php_flag',
+                        },
+                        'directives' => {
+                          :expect     => [:string],
+                          :maps_to    => 'php_directives',
+                          :mod_def    => [],
+                        },
+                        'admin' => {
+                          :children => {
+                            'value' => {
+                              :expect     => [:hash_values],
+                              :maps_to    => 'php_admin_value',
+                            },
+                            'flag' => {
+                              :expect     => [:hash_flags],
+                              :maps_to    => 'php_admin_flag',
+                            },
+                          },
+                        },
+                      },
+                    },
+                    'chroot' => {
+                      :expect     => [:unix_abspath],
+                    },
+                    'chdir' => {
+                      :expect     => [:unix_abspath],
+                    },
+                    'catch_workers_output' => {
+                      :expect     => [:string],
+                      :mod_def    => 'no',
+                    },
+                    #user, group, slowlog, root_group
+                  },
+                },
+              },
+            },
+            'phpunit' => {
+              :maps_to    => 'php::phpunit',
+              :cb_process => "#{ self.to_s }#set_hiera_param@phpunit",
+              :mod_def    => 'false',
+              :doa_def    => {
+                :dev      => 'true',
+                :test     => 'true',
+                :prod     => 'false',
+              },
+              :children  => {
+                'ensure' => {
+                  :expect     => [:string],
+                  :allow      => ['absent', 'purged', 'present', 'installed', 'latest', 'held'],
+                  :maps_to    => 'php::phpunit::ensure',
+                  :mod_def    => 'latest',
+                  :doa_def    => {
+                    :dev      => 'latest',
+                    :test     => 'latest',
+                    :prod     => 'absent',
+                  },
+                },
+              },
+            },
+            'extensions' => {
+              :maps_to    => 'php::extensions',
+              :children_hash => {
+                # package_prefix, compiler_packages
+                'ensure' => {
+                  :expect     => [:string],
+                  :allow      => ['absent', 'purged', 'present', 'installed', 'latest', 'held'],
+                  :mod_def    => 'installed',
+                  :doa_def    => {
+                    :dev      => 'latest',
+                    :test     => 'latest',
+                    :prod     => 'present',
+                  },
+                },
+                'provider' => {
+                  :expect     => [:string],
+                  :allow      => ['pecl', 'aix', 'appdmg', 'apt', 'aptitude', 'aptrpm', 'blastwave', 'dpkg', 'fink', 'freebsd', 'gem', 'hpux', 'macports', 'nim', 'none', 'openbsd', 'opkg', 'pacman', 'pip', 'pip3', 'pkg', 'pkgdmg', 'pkgin', 'pkgng', 'pkgutil', 'portage', 'ports', 'portupgrade', 'puppet_gem', 'rpm', 'rug', 'sun', 'sunfreeware', 'up2date', 'urpmi', 'windows', 'yum', 'zypper'],
+                },
+                'source' => {
+                  :expect     => [:string],
+                },
+                'pecl_source' => {
+                  :expect     => [:string],
+                },
+                'header_packages' => {
+                  :expect     => [:array],
+                },
+                'zend' => {
+                  :expect     => [:boolean],
+                  :mod_def    => 'false',
+                },
+                'settings' => {
+                  :expect     => [:hash_values],
+                },
+                'settings_prefix' => {
+                  :expect     => [:boolean],
+                  :mod_def    => 'false',
+                },
+                'compiler_packages' => {
+                  :expect     => [:array],
+                  :mod_def    => {
+                    'debian'  => ['build-essential'],
+                    'suse'    => {
+                      'OpenSuSE' => ['devel_basis'],
+                    },
+                    'redhat'  => ['gcc', 'gcc-c++', 'make'],
+                    'freebsd' => ['gcc'],
+                  },
+                },
+                'package_prefix' => {
+                  :expect     => [:string],
+                  :mod_def    => {
+                    'debian'  => 'php5-',
+                    'suse'    => 'php5-',
+                    'redhat'  => 'php-',
+                    'freebsd' => 'php56-',
+                  },
+                },
+              },
+            },
+            'settings' => {
+              :maps_to    => 'php::settings',
+              :expect     => [:hash_values],
+            },
+          }
         REPO_ONDREJ = {
             '5.4' => "'http://ppa.launchpad.net/ondrej/php5-oldstable/ubuntu/'",
             '5.5' => "'http://ppa.launchpad.net/ondrej/php5/ubuntu/'",
@@ -24,25 +447,26 @@ module DOA
             '7.0' => "'http://ppa.launchpad.net/ondrej/php-7.0/ubuntu/'",
           }
 
-        # Sets up the PHP provisioning with puppet
-        def self.setup(settings)
-          # Check for disallowed parameters
-          if !settings.nil?
-            settings.each do |param, value|
-              if !SUPPORTED.has_key?(param)
-                puts sprintf(DOA::L10n::UNRECOGNIZED_SW_PARAM, DOA::Guest.sh_header,
-                  DOA::Guest.hostname, Puppet.current_site, SW, param).colorize(:red)
-                raise SystemExit
-              end
-            end
+        def self.custom_setup()
+          DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
+            'php::manage_repos' => 'false',
+          })
+        end
+        def self.set_hiera_param(value, yaml_param, set = true)
+          # Check if `ensure` provided, and set it depending on environment type
+          # Children settings are processed before parent, so `ensure` is already set if present
+          if !Puppet.sw_stack.has_key?(@label) or !Puppet.sw_stack[@label].has_key?(@supported[yaml_param][:children]['ensure'][:maps_to])
+            maps_to = @supported[yaml_param][:children]['ensure'].has_key?(:maps_to) ? @supported[yaml_param][:children]['ensure'][:maps_to] : yaml_param
+            DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
+              #@supported[yaml_param][:children]['ensure'][:maps_to] => "'#{ @supported[yaml_param][:children]['ensure'][:doa_def][DOA::Guest.env] }"
+              maps_to => "'#{ @supported[yaml_param][:children]['ensure'][:doa_def][DOA::Guest.env] }'"
+            })
           end
 
-          # Add the required parameters to the corresponding queues:
-          #  - Puppet Forge modules (loaded through librarian-puppet -> Puppetfile)
-          #  - Classes (loaded through Hiera -> hostname.yaml)
-          Puppet.enqueue_puppetfile_mods([PUPPET_FORGE_MOD]) if const_defined?('PUPPET_FORGE_MOD')
-          Puppet.enqueue_hiera_classes([PUPPET_FORGE_MOD]) if const_defined?('PUPPET_FORGE_MOD')
-
+          doa_def = get_default_value(@supported[yaml_param], :doa_def)
+          mod_def = get_default_value(@supported[yaml_param], :mod_def)
+          return doa_def ? doa_def : mod_def
+        end
           # Add repos from Ondřej Surý for PHP 5.4.x, 5.5.x, 5.6.x
           #case Puppet.os_info(OS_FAMILY)
           #when DOA::OS::LINUX_FAMILY_DEBIAN
@@ -78,7 +502,7 @@ module DOA
           #
           #  REPO_ONDREJ.each do |php_ver, location|
           #    escaped_php_ver = php_ver.gsub('.', '_')
-          #    Puppet.enqueue_repo_apt("php_ondrej_#{ escaped_php_ver }", {
+          #    Puppet.enqueue_apt_repo("php_ondrej_#{ escaped_php_ver }", {
           #      'ensure'   => wanted_repos.include?(php_ver) ? "'present'" : "'absent'",
           #      'comment'  => "'PPA for latest PHP #{ php_ver }.x packages by Ondřej Surý'",
           #      'location' => location,
@@ -87,40 +511,13 @@ module DOA
           #  end
           #  
           #  # Add ppa:ondrej/apache2 to resolve unmet dependencies
-          #  Puppet.enqueue_repo_apt('apache2_ondrej', {
+          #  Puppet.enqueue_apt_repo('apache2_ondrej', {
           #    'ensure'   => wanted_repos.include?(php_ver) ? "'present'" : "'absent'",
           #    'comment'  => "'PPA for latest Apache 2 packages by Ondřej Surý'",
           #    'location' => "'http://ppa.launchpad.net/ondrej/apache2/ubuntu/'",
           #    'key'      => {'id' => "'14AA40EC0831756756D7F66C4F4EA0AAE5267A6C'"},
           #  }, {'before' => "Class['php']"})
           #end
-
-          # Set the provided values or the default otherwise
-          SUPPORTED.each do |param, def_val|
-            if settings.nil? or !settings.has_key?(param) or settings[param].nil?
-              case param
-              when 'version' then 'ensure'
-                Puppet.sw_stack[SW]['ensure'] = def_val
-              else
-                Puppet.sw_stack[SW][param] = def_val
-              end
-            else
-              case param
-              when 'version'
-                ver = DOA::Tools.check_get(settings, DOA::Tools::TYPE_STRING,
-                  [DOA::Guest.hostname, Puppet.current_site, SW, param], param, SUPPORTED['version'])
-                if Tools.valid_version?(ver, [], ['latest', 'present', 'absent'], true, false)
-                  Puppet.sw_stack[SW]['ensure'] = "'#{ ver }'"
-                else
-                  puts sprintf(DOA::L10n::UNRECOGNIZED_VERSION, DOA::Guest.sh_header,
-                    DOA::Guest.hostname, Puppet.current_site, SW, Setting::SW_VERSION).colorize(:red)
-                  raise SystemExit
-                end
-              end
-            end
-          end
-          Puppet.sw_stack[SW]['manage_repos'] = 'false'
-        end
       end
     end
   end

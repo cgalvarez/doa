@@ -1,7 +1,7 @@
 require 'spec_helper'
-describe 'meteor' do
+describe 'apthelper' do
 
   context 'with defaults for all parameters' do
-    it { should contain_class('meteor') }
+    it { should contain_class('apthelper') }
   end
 end

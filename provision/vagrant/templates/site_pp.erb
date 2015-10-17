@@ -4,3 +4,7 @@ hiera_include('classes')
 <% if !@@relationships.empty? %># Set order relationships with chaining arrows
 <%= @@relationships.keys.join("\n") %>
 <% end %>
+
+<% if !@@site_content.empty? %>
+<%= @@site_content.join("\n") %>
+<% end %>

@@ -8,28 +8,16 @@
   end_sep = "=" * 20
   
   if !@@sw_stack.nil? and !@@sw_stack.empty?
-    @@sw_stack.each do |sw, settings|
-      if !settings.empty?
+    @@sw_stack.each do |sw, params|
+      if !params.empty?
+        params = Hash[params.sort]
 %>
 <%= '#' + begin_sep + "\n# " + sw + "\n#" + end_sep %>
+<%      params.each do |param, value|
+%><%= param %>:<%= Tools.format_yaml(value, 1) %>
 <%
-    case sw
-    when Setting::SW_MARIADB
-      requires = []
-      requires.insert(-1, 'Class[php]') if @@sw_stack.has_key?(Setting::SW_PHP)
-      requires.insert(-1, 'Swap_file::Files[mariadb_swapfile]') if @@puppetfile_mods.has_key?(Puppet::PUPPET_MOD_SWAP)
-      if !requires.empty?
-%>mariadb::require: <% requires.each do |require| %>
-  - <%= require %><% end #require
-      end #if
-    end # case
-    
-    # Process software parameters
-    settings.each do |param, value|
-%><%= sw %>::<%= param %>:<%= Tools.format_yaml(value, 1) %>
-<%
-      end # loop sw settings
-    end # if sw settings
-  end # loop @@sw_stack
-end # if @@sw_stack
+        end # loop sw params
+      end # if sw params
+    end # loop @@sw_stack
+  end # if @@sw_stack
 %>

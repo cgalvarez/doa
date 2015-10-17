@@ -1,2 +1,5 @@
 confdir=<%= DOA::Provisioner::Puppet::CONFDIR %>
-basemodulepath=$confdir/modules:$modulepath:<%= DOA::Provisioner::Puppet::MODS_PATH_CUSTOM %>
+# Be careful with next params, they don't work like shell $PATH
+# Read: http://serverfault.com/questions/349046/could-not-find-class-and-yet-it-is-there
+#basemodulepath=$confdir/modules:$modulepath:<%= DOA::Provisioner::Puppet::MODS_PATH_CUSTOM %>
+basemodulepath=$confdir/modules:<%= DOA::Provisioner::Puppet::MODS_PATH_CUSTOM %>:$modulepath

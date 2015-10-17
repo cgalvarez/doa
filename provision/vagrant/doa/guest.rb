@@ -40,6 +40,7 @@ module DOA
     @@os_distro       = nil     # Filled and cached by chosen provisioner
     @@os_distro_ver   = nil     # Filled and cached by chosen provisioner
     @@provision       = false
+    @@env             = nil
 
     # Getters
     def self.name
@@ -114,6 +115,9 @@ module DOA
     def self.provision
       @@provision
     end
+    def self.env
+      @@env
+    end
 
     # Makes the default initialization.
     # +name+:: string containing the name of the guest machine
@@ -148,6 +152,9 @@ module DOA
       @@cores = DOA::Tools.check_get(@@settings, DOA::Tools::TYPE_INTEGER,
           [@@settings[Setting::HOSTNAME], @@settings[Setting::HOSTNAME]], Setting::CORES,
           DOA::Host.default_guest_cores, false, 1)
+      @@env = DOA::Tools.check_get(@@settings, DOA::Tools::TYPE_STRING,
+          [@@settings[Setting::HOSTNAME], @@settings[Setting::HOSTNAME]], Setting::ENVIRONMENT, :dev)
+      @@env = @@env.to_sym if !@@env.is_a?(Symbol)
       @@session = DOA::Session.new(false)
       if self.running?
         @@ip = @@provider.get_ip(@@provider_vname)

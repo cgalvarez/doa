@@ -1,0 +1,15 @@
+{
+  "name": "cgalvarez-apthelper",
+  "version": "0.1.0",
+  "author": "cgalvarez",
+  "summary": "Helper for puppetlabs/apt module",
+  "license": "GPLv2",
+  "source": "",
+  "project_page": null,
+  "issues_url": null,
+  "dependencies": [
+    {"name":"puppetlabs-stdlib","version_requirement":">= 1.0.0"},
+    {"name":"puppetlabs-apt","version_requirement":">= 2.0.0"}
+  ]
+}
+
