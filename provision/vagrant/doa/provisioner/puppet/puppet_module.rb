@@ -9,17 +9,25 @@ class PuppetModule
   GLUE_KEYS       = '->'
   VALIDATORS = [
     :array,
+    :array_ips,
+    :array_ipv4,
+    :array_ipv6,
+    :auto,
     :boolean,
     :chmod,
     :float,
     :hash_flags,
     :hash_values,
     :integer,
+    :ip,
     :ipv4,
     :ipv4_port,
     :ipv6,
+    :level,
     :linux_package_name,
     :port,
+    :puppet_interpolable_string,
+    :puppet_interpolable_uri,
     :semver_branch,
     :semver_version,
     :string,
@@ -30,11 +38,15 @@ class PuppetModule
   ]
   # Validators to enclose between single quotes
   VALIDATORS_TO_WRAP = [
+    :auto,
     :chmod,
     :ipv4,
     :ipv4_port,
     :ipv6,
+    :level,
     :linux_package_name,
+    :puppet_interpolable_string,
+    :puppet_interpolable_uri,
     :semver_branch,
     :semver_version,
     :string,
@@ -244,6 +256,7 @@ class PuppetModule
     os_family     = DOA::Provisioner::Puppet.os_family
     os_distro     = DOA::Provisioner::Puppet.os_distro
     os_distro_ver = DOA::Provisioner::Puppet.os_distro_ver
+    def_val       = config['default'] if config.has_key?(type) and config[type].is_a?(Hash) and config[type].has_key?('default')
 
     config_os = nil
     if config.has_key?(type)

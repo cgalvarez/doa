@@ -69,7 +69,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       machine.trigger.after [:reload, :resume, :up] do
         DOA::Host.manage_hosts
         DOA::Host.add_session_keys
-        DOA::Host.reload_authorized_keys
+        #DOA::Host.reload_authorized_keys
         DOA::Guest.manage_hosts
         DOA::Guest.add_session_keys
 

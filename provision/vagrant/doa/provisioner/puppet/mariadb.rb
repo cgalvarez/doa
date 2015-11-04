@@ -29,7 +29,7 @@ module DOA
         @librarian    = {
           MOD_CGALVAREZ_MARIADB => {
             :git  => 'git://github.com/cgalvarez/puppet-mariadb.git',
-            :ver  => '1.0.0',
+            #:ver  => '1.0.0',
           },
         }
         @supported = {
@@ -313,7 +313,7 @@ swap_file::files { 'mariadb_swapfile':
                 raise SystemExit
               end
             # Allowed branch
-            elsif ALLOWED_BRANCHES[parent].include?(value)
+            elsif !value.nil? and ALLOWED_BRANCHES.has_key?(parent) and ALLOWED_BRANCHES[parent].include?(value)
               @branch = value
             end
             @branch = '10.0' if @branch.nil?  # Default branch

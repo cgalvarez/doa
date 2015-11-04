@@ -4,6 +4,7 @@ require 'singleton'
 require_relative 'puppet/couchdb'
 require_relative 'puppet/mariadb'
 require_relative 'puppet/meteor'
+require_relative 'puppet/nginx'
 require_relative 'puppet/php'
 
 module DOA
@@ -43,6 +44,7 @@ module DOA
       DOA_MOD_APT  = 'cgalvarez/apthelper'
 
       # Class variables
+      @@api             = 'forgeapi'
       @@sw_stack        = {}
       @@puppetfile_mods = {}
       @@hiera_classes   = {}
@@ -84,6 +86,9 @@ module DOA
         @@puppetfile_mods, @@sw_stack, @@hiera_classes, @@relationships = {}, {}, {}, {}
         @@current_site, @@current_sw, @@current_stack = nil, nil, nil
         @@os_family, @@os_distro, @@os_distro_ver = Puppet.os_info(OS_FAMILY), Puppet.os_info(OS_DISTRO), Puppet.os_info(OS_DISTRO_VER)
+        ruby_ver = SSH.ssh_capture(DOA::Env.guest_insecure_ppk, DOA::Guest.user,
+          DOA::Host.os, DOA::Guest.ssh_address, DOA::Guest.os, ["ruby -e 'print RUBY_VERSION'"]).strip.downcase
+        @@api = ruby_ver =~ /\A1\.8\.[0-9]+\z/ ? 'forge' : 'forgeapi'
 
         printf(DOA::L10n::SETTING_UP_PROVISIONER, DOA::Guest.sh_header, TYPE, DOA::Guest.hostname)
         sites = DOA::Tools.check_get(DOA::Guest.settings, DOA::Tools::TYPE_HASH,
@@ -104,6 +109,7 @@ module DOA
               when Setting::SW_COUCHDB then 'CouchDB'
               when Setting::SW_MARIADB then 'MariaDB'
               when Setting::SW_METEOR then 'Meteor'
+              when Setting::SW_NGINX then 'Nginx'
               when Setting::SW_PHP then 'PHP'
               end
             if Puppet.const_defined?(sw_mod) and (subclass = Puppet.const_get(sw_mod)).is_a?(Class) and

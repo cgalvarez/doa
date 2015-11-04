@@ -13,10 +13,14 @@ module DOA
     MSG_WRONG_TYPE      = 'wrong_type'
     # Regex for Linux package name validator
     # See: http://www.linuxquestions.org/questions/slackware-14/characters-allowed-in-package-name-and-version-string-4175552002/
+    RGX_LEVEL           = /\A[12](:[12])*\z/
     RGX_INTEGER         = /\A\d+\z/
     RGX_CHMOD           = /\A0[0-7]{3}\z/
     RGX_LINUX_PKG_NAME  = /\A[a-zA-Z0-9][.+@\-\w]+\z/
     RGX_STRING_INT      = /\A\d+\z/
+    # Puppet variables regex: https://docs.puppetlabs.com/puppet/latest/reference/lang_variables.html#regular-expressions-for-variable-names
+    RGX_PUPPET_INTERPOLABLE_URI_SOURCE = /\A(?:(?:puppet|file):\/\/)?(?:(?:[.\w-]*%\{(?:hiera|scope)\('(?:(?:[a-z][a-z0-9_]*)?(?:::[a-z][a-z0-9_]*)*::[a-z0-9_][a-zA-Z0-9_]*)'\)\}[.\w-]*|[.\w-]*%\{::[a-z0-9_][a-zA-Z0-9_]*\}[.\w-]*|[.\w-]*\$\{(?:[a-z][a-z0-9_]*)?(?:::[a-z][a-z0-9_]*)*::[a-z0-9_][a-zA-Z0-9_]*\}[.\w-]*|[.\w-]*\$\{[a-z0-9_][a-zA-Z0-9_]*\}[.\w-]*|[.\w-]*\$[a-z0-9_][a-zA-Z0-9_]*[.\w-]*)?(?:\/[.\w-]*%\{(?:hiera|scope)\('(?:(?:[a-z][a-z0-9_]*)?(?:::[a-z][a-z0-9_]*)*::[a-z0-9_][a-zA-Z0-9_]*)'\)\}[.\w-]*|\/[.\w-]*%\{::[a-z0-9_][a-zA-Z0-9_]*\}[.\w-]*|\/[.\w-]*\$\{(?:[a-z][a-z0-9_]*)?(?:::[a-z][a-z0-9_]*)*::[a-z0-9_][a-zA-Z0-9_]*\}[.\w-]*|\/[.\w-]*\$\{[a-z0-9_][a-zA-Z0-9_]*\}[.\w-]*|\/[.\w-]*\$[a-z0-9_][a-zA-Z0-9_]*[.\w-]*|\/[.\w-]+)*(?:\/[.\w-]*%\{(?:hiera|scope)\('(?:(?:[a-z][a-z0-9_]*)?(?:::[a-z][a-z0-9_]*)*::[a-z0-9_][a-zA-Z0-9_]*)'\)\}[.\w-]*|\/[.\w-]*%\{::[a-z0-9_][a-zA-Z0-9_]*\}[.\w-]*|\/[.\w-]*\$\{(?:[a-z][a-z0-9_]*)?(?:::[a-z][a-z0-9_]*)*::[a-z0-9_][a-zA-Z0-9_]*\}[.\w-]*|\/[.\w-]*\$\{[a-z0-9_][a-zA-Z0-9_]*\}[.\w-]*|\/[.\w-]*\$[a-z0-9_][a-zA-Z0-9_]*[.\w-]*|\/[.\w-]+)+)\z/
+    RGX_PUPPET_INTERPOLABLE_STRING = /\A(?:%\{(?:hiera|scope)\('(?:(?:[a-z][a-z0-9_]*)?(?:::[a-z][a-z0-9_]*)*::[a-z0-9_][a-zA-Z0-9_]*)'\)\}|%\{::[a-z0-9_][a-zA-Z0-9_]*\}|\$\{(?:[a-z][a-z0-9_]*)?(?:::[a-z][a-z0-9_]*)*::[a-z0-9_][a-zA-Z0-9_]*\}|\$\{[a-z0-9_][a-zA-Z0-9_]*\}|\$[a-z0-9_][a-zA-Z0-9_]*|(?:(?!hiera|scope|\$|%).)+)+\z/
     RGX_UNIX_ABSPATH    = /\A(?:\/[.\w-]+)+\z/
     RGX_UNIX_RELPATH    = /\A(?:[.\w-]+\/?)+\z/
     RGX_UNIX_PATH       = /\A(?:\/?[.\w-]+\/?)+\z/
@@ -176,6 +180,11 @@ module DOA
       true
     end
 
+    # Returns +true+ if +check+ is a valid flag string (on/off).
+    def self.valid_flag?(check)
+      (check.is_a?(String) and (check == 'on' or check == 'off'))
+    end
+
     # Returns +true+ if +check+ is a non-empty array.
     def self.valid_array?(check)
       (check.is_a?(Array) and !check.empty?)
@@ -191,9 +200,72 @@ module DOA
       (check.is_a?(Integer) or check =~ Tools::RGX_INTEGER)
     end
 
+    # Returns +true+ if +check+ is a valid level value.
+    def self.valid_level?(check)
+      (check.is_a?(String) and check =~ Tools::RGX_LEVEL)
+    end
+
+    # Returns +true+ if +check+ is a valid level value.
+    def self.valid_auto?(check)
+      (check.is_a?(String) and check == 'auto')
+    end
+
     # Returns +true+ if +check+ is a valid boolean value.
     def self.valid_chmod?(check)
       (!check.nil? and check.is_a?(String) and Tools::RGX_CHMOD =~ check)
+    end
+
+    # Returns +true+ if +check+ is an array of valid IPv4 addresses.
+    def self.valid_array_ipv4?(check)
+      valid = true
+      if !check.is_a?(Array)
+        valid = false
+      else
+        check.each do |item|
+          if !Tools::valid_ipv4?(item)
+            valid = false
+            break
+          end
+        end
+      end
+      valid
+    end
+
+    # Returns +true+ if +check+ is an array of valid IPv6 addresses.
+    def self.valid_array_ipv6?(check)
+      valid = true
+      if !check.is_a?(Array)
+        valid = false
+      else
+        check.each do |item|
+          if !Tools::valid_ipv6?(item)
+            valid = false
+            break
+          end
+        end
+      end
+      valid
+    end
+
+    # Returns +true+ if +check+ is an array of valid IP addresses (IPv4 or IPv6).
+    def self.valid_array_ips?(check)
+      valid = true
+      if !check.is_a?(Array)
+        valid = false
+      else
+        check.each do |item|
+          if !Tools::valid_ipv4?(item) and !Tools::valid_ipv6?(item)
+            valid = false
+            break
+          end
+        end
+      end
+      valid
+    end
+
+    # Returns +true+ if +check+ is a valid IP address (IPv4 or IPv6).
+    def self.valid_ip?(check)
+      Tools::valid_ipv4?(check) or Tools::valid_ipv6?(check)
     end
 
     # Returns +true+ if +check+ is a valid IPv4 address.
@@ -212,11 +284,20 @@ module DOA
 
     # Returns +true+ if +check+ is a valid IPv4 address.
     def self.valid_ipv6?(check)
-      ###if /\A(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\Z/ =~ addr
-      if !check.nil? and Tools::RGX_IPV4 =~ check
-        return $~.captures.all? {|i| i.to_i < 256}
-      end
-      return false
+      (!check.nil? and Tools::RGX_IPV6 =~ check)
+    end
+
+    # Returns +true+ if +check+ is a valid Puppet interpolable URI
+    # Examples:
+    #   - /media/conf.%{hiera('input::hostname')}/shared-storage0/conf.$hostname/${fqdn}.motd/file
+    #   - file:///media/conf.%{hiera('input::hostname')}/shared-storage0/conf.$hostname/${fqdn}.motd/file
+    #   - puppet:///media/conf.%{hiera('input::hostname')}/shared-storage0/conf.$hostname/${fqdn}.motd/file
+    def self.valid_puppet_interpolable_uri?(check)
+      return (!check.nil? and !(Tools::RGX_PUPPET_INTERPOLABLE_URI_SOURCE =~ check).nil?)
+    end
+
+    def self.valid_puppet_interpolable_string?(check)
+      return (!check.nil? and !(Tools::RGX_PUPPET_INTERPOLABLE_STRING =~ check).nil?)
     end
 
     # Returns +true+ if +check+ is a valid UNIX absolute path.
