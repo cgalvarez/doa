@@ -249,7 +249,7 @@ module DOA
             },
           }
 
-        def self.custom_setup
+        def self.custom_setup(provided)
           #Puppet.enqueue_relationship("Class['#{ MOD_CGALVAREZ_MARIADB }']", {'before' => "Class['#{ PHP.label }']"}) if Puppet.current_stack.has_key?(PHP.label)
 
           # Configure swap file when low available memory
@@ -292,7 +292,7 @@ swap_file::files { 'mariadb_swapfile':
                   when NODE_TYPE_CLUSTER then 'MariaDB Galera Cluster'
                   end
                 puts sprintf(DOA::L10n::MARIADB_NO_SUPPORT, DOA::Guest.sh_header, DOA::Guest.hostname,
-                  DOA::Guest.provisioner.current_site, @label.downcase, tag, value).colorize(:red)
+                  DOA::Guest.provisioner.current_project, @label.downcase, tag, value).colorize(:red)
                 raise SystemExit
               end
             # Specific version
@@ -309,7 +309,7 @@ swap_file::files { 'mariadb_swapfile':
                 @provided.recursive_set!(keys.push('ensure'), 'present')
               elsif parent_cfg['ensure'] == 'latest'
                 puts sprintf(DOA::L10n::VERSION_INCOMP, DOA::Guest.sh_header, DOA::Guest.hostname,
-                  DOA::Guest.provisioner.current_site, @label.downcase, 'ensure', 'latest').colorize(:red)
+                  DOA::Guest.provisioner.current_project, @label.downcase, 'ensure', 'latest').colorize(:red)
                 raise SystemExit
               end
             # Allowed branch
@@ -323,7 +323,7 @@ swap_file::files { 'mariadb_swapfile':
               @req_branches.insert(-1, @branch)
             elsif !@req_branches.include?(@branch)
               puts sprintf(DOA::L10n::BRANCH_INCOMP, DOA::Guest.sh_header, DOA::Guest.hostname,
-                DOA::Guest.provisioner.current_site, @label.downcase).colorize(:red)
+                DOA::Guest.provisioner.current_project, @label.downcase).colorize(:red)
               raise SystemExit
             end
 
@@ -334,7 +334,7 @@ swap_file::files { 'mariadb_swapfile':
               else nil
               end
             if !main_class.nil?
-              DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {"mariadb::#{ main_class }::repo_version" => @branch})
+              DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {"mariadb::#{ main_class }::repo_version" => "'#{ @branch }'"})
             end
           end
 

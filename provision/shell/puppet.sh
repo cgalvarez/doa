@@ -6,6 +6,14 @@ ALL_USERS_PROFILE='/etc/profile'
 ENVIRONMENT='/etc/environment'
 LOCAL_USER='vagrant'
 
+# Colored messages
+# http://stackoverflow.com/questions/5947742/how-to-change-the-output-color-of-echo-in-linux
+COLOR_GREEN="\033[0;32m"
+COLOR_RED="\033[0;31m"
+COLOR_END="\033[0m"
+STATUS_OK="[${COLOR_GREEN}OK${COLOR_END}]"
+STATUS_ERROR="[${COLOR_RED}ERROR${COLOR_END}]"
+
 command -v git >/dev/null 2>&1; FOUND_GIT=$?
 command -v librarian-puppet >/dev/null 2>&1; FOUND_LP=$?
 command -v apt-get >/dev/null 2>&1; FOUND_APT=$?
@@ -16,26 +24,31 @@ command -v gem >/dev/null 2>&1; FOUND_RUBY=$?
 APT='apt-get'
 YUM='yum'
 if [ "${FOUND_YUM}" -eq '0' ]; then
-  PKG_MANAGER=$YUM
+  PKG_MANAGER=${YUM}
 elif [ "${FOUND_APT}" -eq '0' ]; then
-  PKG_MANAGER=$APT
+  PKG_MANAGER=${APT}
+  # Suppress warning messages due to provisioners
+  #  1) dpkg-reconfigure: unable to re-open stdin: No file or directory
+  #  2) stdin: is not a tty
+  export DEBIAN_FRONTEND=noninteractive
 fi
 
 
 # Install lsb-release if not present
 # ------------------------------------------------------------------------------
 if [ "${FOUND_LSBREL}" -ne '0' ]; then
-  echo 'Installing lsb-release...'
   case $PKG_MANAGER in
-    $YUM)
+    ${YUM})
       LSB_PKG='redhat-lsb-core'
       ;;
-    $APT)
+    ${APT})
       LSB_PKG='lsb-release'
       ;;
   esac
-  ${PKG_MANAGER} install -q -y ${LSB_PKG}
-  echo 'lsb-release installed...'
+  echo 'Checking for lsb-release...'
+  ${PKG_MANAGER} install -q -y ${LSB_PKG} >/dev/null 2>&1
+  MSG='Installing lsb-release...'
+  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
 fi
 LSB_ID=$(lsb_release --id --short)
 
@@ -45,7 +58,7 @@ LSB_ID=$(lsb_release --id --short)
 # https://docs.puppetlabs.com/guides/puppetlabs_package_repositories.html
 ADD_REPO='1'
 case $PKG_MANAGER in
-  $YUM)
+  ${YUM})
     case $LSB_ID in
       'CentOS')
         LSB_MAJOR_RELEASE=$(lsb_release --release --short | sed 's/^\([0-9][0-9]*\)\..*$/\1/g')
@@ -53,26 +66,28 @@ case $PKG_MANAGER in
         REPO_PROOF='/etc/yum.repos.d/puppetlabs-pc1.repo'
         if [ ! -e $REPO_PROOF ]; then
           ADD_REPO=0
-          rpm -ivh "http://yum.puppetlabs.com/puppetlabs-release-el-${LSB_MAJOR_RELEASE}.noarch.rpm"
+          rpm -ivh "http://yum.puppetlabs.com/puppetlabs-release-el-${LSB_MAJOR_RELEASE}.noarch.rpm" >/dev/null
         fi
         ;;
     esac
     ;;
-  $APT)
+  ${APT})
     LSB_CODENAME=$(lsb_release --codename --short)
     REPO="puppetlabs-release-pc1-${LSB_CODENAME}.deb"
     REPO_PROOF='/etc/apt/sources.list.d/puppetlabs-pc1.list'
     if [ ! -e ${REPO_PROOF} ]; then
       ADD_REPO=0
       wget -q "http://apt.puppetlabs.com/${REPO}"
-      dpkg -i ${REPO}
+      dpkg -i ${REPO} >/dev/null
     fi
     ;;
 esac
 if [ "${ADD_REPO}" -eq '0' ]; then
-  print "${REPO_PROOF} not found => fetching and installing ${REPO}"
-  ${PKG_MANAGER} update -y -q
-  echo 'Puppet Labs repositories added...'
+  echo 'Checking for Puppet Labs repositories...'
+  echo "${REPO_PROOF} not found..."
+  ${PKG_MANAGER} update -y -q >/dev/null 2>&1
+  MSG='Fetching and installing Puppet Labs repositories...'
+  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
 fi
 
 
@@ -81,7 +96,7 @@ fi
 PUPPET_PKG='puppet-agent'
 INSTALL_PUPPET='1'
 case $PKG_MANAGER in
-  $YUM)
+  ${YUM})
     case $LSB_ID in
       'CentOS')
         PUPPET_VER_INSTALLED=$(yum list installed $PUPPET_PKG 2>/dev/null | awk "\$1 ~ /${PUPPET_PKG}.*/ { print \$2 }")
@@ -90,16 +105,17 @@ case $PKG_MANAGER in
         ;;
     esac
     ;;
-  $APT)
+  ${APT})
     PUPPET_VER_INSTALLED=$(apt-cache policy puppet-agent | sed -n 's/\s*Installed:\s*\([0-9\.][0-9\.]*\).*/\1/p')
     PUPPET_VER_CANDIDATE=$(apt-cache policy puppet-agent | sed -n 's/\s*Candidate:\s*\([0-9\.][0-9\.]*\).*/\1/p')
     INSTALL_PUPPET=$({ [ -z "${PUPPET_VER_INSTALLED}" ] || [ "${PUPPET_VER_INSTALLED}" != "${PUPPET_VER_CANDIDATE}" ]; } && echo '0' || echo '1')
     ;;
 esac
 if [ "${INSTALL_PUPPET}" -eq '0' ]; then
-  echo 'Installing the latest version of Puppet...'
-  ${PKG_MANAGER} install -q -y ${PUPPET_PKG}
-  echo "Latest version of Puppet installed..."
+  echo 'Checking for Puppet...'
+  ${PKG_MANAGER} install -q -y ${PUPPET_PKG} >/dev/null 2>&1
+  MSG='Installing the latest version of Puppet...'
+  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
 fi
 
 
@@ -107,35 +123,33 @@ fi
 # ------------------------------------------------------------------------------
 if [ "${FOUND_GIT}" -ne '0' ]; then
   GIT_PKG='git'
-  echo 'Installing git...'
   case $PKG_MANAGER in
-    $YUM)
+    ${YUM})
       GIT_PKG="makecache ${GIT_PKG}"
       ;;
   esac
-  ${PKG_MANAGER} install -y -q ${GIT_PKG}
-  echo 'git installed...'
+  echo 'Checking for git...'
+  ${PKG_MANAGER} install -y -q ${GIT_PKG} >/dev/null 2>&1
+  MSG='Installing git...'
+  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
 fi
 
 
 # Install rubygems and required gems if not present
 # ------------------------------------------------------------------------------
-if [ "${FOUND_RUBY}" -ne '0' ]; then
-  RUBY_PKG='rubygems'
-  echo 'Installing rubygems and required gems...'
-  case $PKG_MANAGER in
-    $YUM)
-      RUBY_PKG='rubygems ruby-json ruby-devel'
-      ;;
-    $APT)
-      RUBY_PKG='rubygems ruby-json ruby-dev'
-      ##dpkg -s ruby-dev >/dev/null 2>&1; FOUND_RUBYDEV=$?
-      ##RUBY_PKG=$([ "$FOUND_RUBY_DEV" -eq '0' ] && echo 'rubygems ruby-json' || echo 'rubygems ruby-json ruby-dev')
-      ;;
-  esac
-  ${PKG_MANAGER} install -y -q ${RUBY_PKG}
-  echo 'Rubygems and required gems installed...'
-fi
+[ "${FOUND_RUBY}" -ne '0' ] && RUBY_PKG='ruby' || RUBY_PKG=''
+case $PKG_MANAGER in
+  ${YUM})
+    RUBY_PKG="${RUBY_PKG} rubygems ruby-json ruby-devel"
+    ;;
+  ${APT})
+    RUBY_PKG="${RUBY_PKG} ruby-json ruby-dev"
+    ;;
+esac
+echo 'Checking for Ruby and required gems...'
+${PKG_MANAGER} install -y -q ${RUBY_PKG} >/dev/null 2>&1
+MSG='Installing required Ruby packages...'
+[ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
 
 
 # Install/update R10K through the Ruby gem exec bundled within Puppet 4
@@ -143,9 +157,10 @@ fi
 command -v r10k >/dev/null 2>&1 && R10K_VER_INSTALLED=$(${PUPPET_BIN_PATH}/r10k version | sed -n 's/\s*r10k\s*\([0-9\.][0-9\.]*\).*/\1/p')
 R10K_VER_CANDIDATE=$(${PUPPET_BIN_PATH}/gem list r10k --remote | sed -n 's/^r10k\s*(\([0-9\.][0-9\.]*\)).*/\1/p')
 if [ -z "${R10K_VER_INSTALLED}" ] || [ "${R10K_VER_INSTALLED}" != "${R10K_VER_CANDIDATE}" ]; then
-  echo 'Installing the latest version of R10K...'
-  ${PUPPET_BIN_PATH}/gem install r10k
-  echo 'Latest version of R10K installed...'
+  echo 'Checking for R10K...'
+  ${PUPPET_BIN_PATH}/gem install -q r10k >/dev/null 2>&1
+  MSG='Installing the latest version of R10K...'
+  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
 fi
 
 
@@ -162,8 +177,11 @@ else
   LP_VER_CANDIDATE=$(gem list ${LP_GEM} --remote | sed -n "s/^${LP_GEM}\s*(\([0-9\.][0-9\.]*\)).*/\1/p")
 fi
 if [ -z "${LP_VER_INSTALLED}" ] || [ "${LP_VER_INSTALLED}" != "${LP_VER_CANDIDATE}" ]; then
-  # Install the most recent 1.x.x version when Ruby 1.8.* installed, but not 2.x.x which needs Ruby 1.9
-  [ -n "${LP_MAJOR_VERSION}" ] && gem install ${LP_GEM} --version "~>${LP_MAJOR_VERSION}" || gem install ${LP_GEM}
+  echo 'Checking for librarian-puppet...'
+  # Install the most recent 1.x.x version when Ruby 1.8.* installed, but not 2.x.x which needs Ruby 1.9.x or greater
+  [ -n "${LP_MAJOR_VERSION}" ] && gem install -q ${LP_GEM} --version "~>${LP_MAJOR_VERSION}" >/dev/null 2>&1 || gem install -q ${LP_GEM} >/dev/null 2>&1
+  MSG='Installing librarian-puppet...'
+  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
 fi
 
 
@@ -172,12 +190,12 @@ fi
 EXECS_TO_PATH="augtool
 r10k"
 set -f; IFS='
-'                           # turn off variable value expansion except for splitting at newlines
+'                   # turn off variable value expansion except for splitting at newlines
 for exec_file in $EXECS_TO_PATH; do
   set +f; unset IFS
   ln -fs "../puppet/bin/${exec_file}" "${PUPPET_LN_PATH}/${exec_file}"
 done
-set +f; unset IFS           # do it again in case $INPUT was empty
+set +f; unset IFS   # do it again in case $INPUT was empty
 
 
 # Some Puppet executables are not in the PATH, so we have to options:
@@ -202,17 +220,13 @@ for f in $PUPPET_LN_PATH/*; do
   symlink="/usr/local/bin/${f##*/}"
   # File does not exist
   if [ ! -e $symlink ]; then
-    ln -s $f $symlink
+    ln -s ${f} ${symlink}
   # File exists but it is not a symlink or points to a different target
-  elif [ ! -L $f ] || [ ! "${symlink}" -ef "${f}" ]; then
-    ln -fs $f $symlink
+elif [ ! -L ${f} ] || [ ! "${symlink}" -ef "${f}" ]; then
+    ln -fs ${f} ${symlink}
   fi
 done
 
 # Local puppet folder must belong to Vagrant default user
 mkdir -p "/home/${LOCAL_USER}/.puppetlabs/var"
 chown -R ${LOCAL_USER}:${LOCAL_USER} "/home/${LOCAL_USER}/.puppetlabs"
-
-
-
-

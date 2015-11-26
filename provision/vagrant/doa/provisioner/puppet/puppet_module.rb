@@ -6,7 +6,7 @@ class PuppetModule
   GLUE_METHOD     = '#'
   GLUE_PARAMS     = '@'
   GLUE_ITEMS      = ','
-  GLUE_KEYS       = '->'
+  GLUE_KEYS       = DOA::Tools::GLUE_KEYS # '->'
   VALIDATORS = [
     :array,
     :array_ips,
@@ -71,12 +71,16 @@ class PuppetModule
   def self.label
     @label
   end
+  def self.supported
+    @supported
+  end
 
   def self.check_unsupported_first_level_params(supported, provided)
     provided.each do |param, config|
       if !supported.has_key?(param)
-        puts sprintf(DOA::L10n::UNRECOGNIZED_SW_PARAM, DOA::Guest.sh_header,
-          DOA::Guest.hostname, DOA::Guest.provisioner.current_site, @label.downcase, param).colorize(:red)
+        puts sprintf(DOA::L10n::UNRECOGNIZED_SW_PARAM, DOA::Guest.sh_header, DOA::Guest.hostname,
+          DOA::Guest.provisioner.current_project.nil? ? 'machine stack' : DOA::Guest.provisioner.current_project,
+          @label.downcase, param).colorize(:red)
         raise SystemExit
       end
     end
@@ -105,7 +109,7 @@ class PuppetModule
           end
           if found
             puts sprintf(DOA::L10n::EXCLUSIVE_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-              DOA::Guest.provisioner.current_site, @label.downcase, param, exclusive).colorize(:red)
+              DOA::Guest.provisioner.current_project, @label.downcase, param, exclusive).colorize(:red)
             raise SystemExit
           end
         end
@@ -157,7 +161,7 @@ class PuppetModule
           if config.has_key?(:allow)
             if provided[param].is_a?(Array) and !(provided[param] - config[:allow]).empty? or !config[:allow].include?(provided[param].to_s)
               puts sprintf(DOA::L10n::UNSUPPORTED_VALUE_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-                DOA::Guest.provisioner.current_site, @label.downcase, provided[param], param).colorize(:red)
+                DOA::Guest.provisioner.current_project, @label.downcase, provided[param], param).colorize(:red)
               raise SystemExit
             end
           end
@@ -171,7 +175,7 @@ class PuppetModule
                 cb_validate.insert(-1, "DOA::Tools#valid_#{ expected.to_s }?");
               else
                 puts sprintf(DOA::L10n::UNSUPPORTED_VALUE_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-                  DOA::Guest.provisioner.current_site, @label.downcase, expected.to_s, :expect.to_s).colorize(:red)
+                  DOA::Guest.provisioner.current_project, @label.downcase, expected.to_s, :expect.to_s).colorize(:red)
                 raise SystemExit
               end
             end
@@ -200,7 +204,7 @@ class PuppetModule
         end
       else
         puts sprintf(DOA::L10n::UNSUPPORTED_PARAM_VALUE_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-          DOA::Guest.provisioner.current_site, @label.downcase, param).colorize(:red)
+          DOA::Guest.provisioner.current_project, @label.downcase, param).colorize(:red)
         raise SystemExit
       end
 
@@ -221,7 +225,7 @@ class PuppetModule
           end
           value = new_value
         end
-        
+
         # Assign value when catched
         maps_to = (config.has_key?(:maps_to) and !config[:maps_to].blank?) ? config[:maps_to] : param
         ###stack_settings[config[:maps_to]] = case config.has_key?(:expect)
@@ -248,7 +252,7 @@ class PuppetModule
     DOA::Provisioner::Puppet.enqueue_librarian_mods(@librarian) if @librarian.is_a?(Hash) and !@librarian.blank?
     DOA::Provisioner::Puppet.enqueue_hiera_classes(@hieraclasses) if @hieraclasses.is_a?(Array) and !@hieraclasses.blank?
     DOA::Provisioner::Puppet.enqueue_hiera_params(@label, set_params(@supported, (!settings.nil? and settings.is_a?(Hash)) ? settings : {})) if !@supported.empty?
-    self.send('custom_setup') if self.respond_to?('custom_setup', @provided)
+    self.send('custom_setup', @provided) if self.respond_to?('custom_setup')
   end
 
   def self.get_default_value(config, type = :doa_def)
@@ -329,13 +333,13 @@ class PuppetModule
       })
     else
       puts sprintf(DOA::L10n::NOT_SUPPORTED_BRANCH, DOA::Guest.sh_header, DOA::Guest.hostname,
-        DOA::Guest.provisioner.current_site, @label.downcase, @label, value).colorize(:red)
+        DOA::Guest.provisioner.current_project, @label.downcase, @label, value).colorize(:red)
       raise SystemExit
     end
     nil
   end
 
-  def self.empty
+  def self.empty(value)
     nil
   end
 end

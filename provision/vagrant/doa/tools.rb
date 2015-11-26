@@ -37,6 +37,8 @@ module DOA
     MAX_PORT            = 65535
     MIN_PORT            = 0
     YAML_TAB            = '  '
+    # GLUE
+    GLUE_KEYS           = '->'
 
 
     # Gets the value of a setting with type integer.
@@ -54,7 +56,7 @@ module DOA
       if var.nil? or (!key.nil? and key.is_a?(String) and !key.empty? and var.is_a?(Hash) and (!var.has_key?(key) or var[key].nil?))
         if default.nil?
           msg_type = Tools::MSG_MISSING_VALUE
-        elsif 
+        elsif
           value = default
         end
       else
@@ -130,19 +132,19 @@ module DOA
         msg_type = Tools::MSG_WRONG_TYPE if value.nil? and msg_type.empty?
       end
 
-      # Get message string and its input arguments when 
+      # Get message string and its input arguments when
       case msg_type
       when Tools::MSG_MISSING_VALUE
         msg = case ctx.size
           when 2 then DOA::L10n::MISSING_PARAM_TYPE_CTX_VM
-          when 3 then DOA::L10n::MISSING_PARAM_TYPE_CTX_SITE
+          when 3 then DOA::L10n::MISSING_PARAM_TYPE_CTX_PROJECT
           when 4 then DOA::L10n::MISSING_PARAM_TYPE_CTX_SW
           when 5 then DOA::L10n::MISSING_PARAM_TYPE_CTX_ASSET
           end
       when Tools::MSG_WRONG_TYPE
         msg = case ctx.size
           when 2 then DOA::L10n::WRONG_TYPE_CTX_VM
-          when 3 then DOA::L10n::WRONG_TYPE_CTX_SITE
+          when 3 then DOA::L10n::WRONG_TYPE_CTX_PROJECT
           when 4 then DOA::L10n::WRONG_TYPE_CTX_SW
           when 5 then DOA::L10n::WRONG_TYPE_CTX_ASSET
           end
@@ -329,7 +331,7 @@ module DOA
 
     # Returns +true+ if +check+ is a valid port number.
     def self.valid_port?(check)
-      if !check.nil? and 
+      if !check.nil? and
           (check.is_a? Integer and check <= Tools::MAX_PORT and check >= Tools::MIN_PORT) or
           (check.is_a? String and Tools::RGX_STRING_INT =~ check and check.to_i <= Tools::MAX_PORT and check.to_i >= Tools::MIN_PORT)
         return true
@@ -375,14 +377,73 @@ module DOA
       if item.is_a?(String) or item.is_a?(Integer)
         return " #{ item.to_s }"
       elsif item.is_a?(Array)
-        return value.to_yaml.gsub("---", '').gsub("\n", "\n#{ indent }")
+        #return item.to_yaml.gsub("---", '').gsub("\n", "\n#{ indent }").rstrip
+        return item.size > 0 ? "\n#{ indent }- #{ item.join("\n#{ indent }- ") }" : ''
       elsif item.is_a?(Hash)
         text = ''
+        #item = item.sort.to_h
+        item.keys.sort.each { |k| item[k] = item.delete k }
         item.each do |key, val|
           text = "#{ text.to_s }\n#{ indent }#{ key }:#{ Tools.format_yaml(val, depth + 1) }"
         end
         return text
       end
+    end
+
+    def self.get_puppet_mod_def_value(mod, keys, type = :doa_def)
+      puppetmod = DOA::Provisioner::Puppet.const_get(mod)
+      last, recursion = keys.last, puppetmod.supported
+      keys.each do |key|
+        if recursion.is_a?(Hash) and recursion.has_key?(key)
+          if key == last
+            recursion = recursion[key]
+          elsif recursion[key].has_key?(:children_hash)
+            recursion = recursion[key][:children_hash]
+          else
+            recursion = recursion[key][:children]
+          end
+        else
+          recursion = nil
+        end
+      end
+      return recursion.nil? ? nil : puppetmod.get_default_value(recursion, type)
+    end
+
+    def self.get_puppet_mod_prioritized_def_value(path, puppetmod)
+      value = DOA::Tools.recursive_get(DOA::Guest.provisioner.current_stack, path)
+      value = DOA::Tools.recursive_get(DOA::Guest.settings['stack'], path) if value.empty?
+      filtered_path = path - ['*']
+      value = DOA::Tools.get_puppet_mod_def_value(puppetmod, filtered_path, :doa_def) if value.empty?
+      value = DOA::Tools.get_puppet_mod_def_value(puppetmod, filtered_path, :mod_def) if value.empty?
+      return value
+    end
+    def self.recursive_get(hash, keys)
+      #keys = path.split(GLUE_KEYS)
+      found, recursion, last = false, hash, keys.last
+      keys.each_with_index do |key, index|
+        if key == '*'
+          if recursion.is_a?(Hash)
+            subrecursion = nil
+            recursion.each do |subkey, subvalue|
+              #subrecursion = recursive_get(subvalue, keys[index + 1, keys.size - index].join(GLUE_KEYS))
+              subrecursion = recursive_get(subvalue, keys[index + 1, keys.size - index])
+              break if !subrecursion.nil?
+            end
+            recursion = subrecursion
+            found = true if !recursion.nil?
+          end
+          break;
+        elsif !recursion.nil? and recursion.has_key?(key)
+          recursion = recursion[key]
+          if key == last
+            found = true
+            break
+          end
+        else
+          break
+        end
+      end
+      return found ? recursion : nil
     end
 
     # Returns +true+ if +check+ is a valid URL.

@@ -447,7 +447,7 @@ module DOA
             '7.0' => "'http://ppa.launchpad.net/ondrej/php-7.0/ubuntu/'",
           }
 
-        def self.custom_setup()
+        def self.custom_setup(provided)
           DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
             'php::manage_repos' => 'false',
           })
@@ -509,7 +509,7 @@ module DOA
           #      'key'      => {'id' => "'14AA40EC0831756756D7F66C4F4EA0AAE5267A6C'"},
           #    }, {'before' => "Class['php']"})
           #  end
-          #  
+          #
           #  # Add ppa:ondrej/apache2 to resolve unmet dependencies
           #  Puppet.enqueue_apt_repo('apache2_ondrej', {
           #    'ensure'   => wanted_repos.include?(php_ver) ? "'present'" : "'absent'",

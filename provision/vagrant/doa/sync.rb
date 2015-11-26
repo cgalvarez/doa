@@ -45,7 +45,7 @@ module DOA
               params[Setting::ASSET_SYNC_MODE] : Setting::SYNC_BRSYNC
             path = DOA::Tools.check_get(params, DOA::Tools::TYPE_STRING,
               [DOA::Guest.settings[Setting::HOSTNAME], fqdn, Setting::SW_WP, asset, Setting::ASSET_PATH], Setting::ASSET_PATH, '')
-            
+
             if sync_mode == Setting::SYNC_BRSYNC and !path.empty?
               # Build the from/to absolute paths
               from_path = (Pathname.new(path)).absolute? ? path : File.expand_path(path)
@@ -77,23 +77,23 @@ module DOA
       end
     end
     def create_listener
-      DOA::Guest.settings[Setting::SITES].each do |fqdn, config|
-        if config.has_key?(Setting::SITE_STACK) and config[Setting::SITE_STACK].is_a? Hash
+      DOA::Guest.settings[Setting::PROJECTS].each do |project, config|
+        if config.has_key?(Setting::PROJECT_STACK) and config[Setting::PROJECT_STACK].is_a? Hash
           vm_www_root = DOA::Tools.check_get(DOA::Guest.settings, DOA::Tools::TYPE_STRING,
             [DOA::Guest.settings[Setting::HOSTNAME], Setting::WWW_ROOT], Setting::WWW_ROOT, '')
           site_www_root = DOA::Tools.check_get(config, DOA::Tools::TYPE_STRING,
-            [DOA::Guest.settings[Setting::HOSTNAME], fqdn, Setting::SITE_WWW_ROOT], Setting::SITE_WWW_ROOT, '')
+            [DOA::Guest.settings[Setting::HOSTNAME], project, Setting::PROJECT_WWW_ROOT], Setting::PROJECT_WWW_ROOT, '')
           if !site_www_root.empty?
             root = site_www_root
           elsif !vm_www_root.empty?
-            root = "#{ vm_www_root }/#{ fqdn }"
+            root = "#{ vm_www_root }/#{ project }"
           else
-            root = "#{ Sync::WWW_ROOT }/#{ fqdn }"
+            root = "#{ Sync::WWW_ROOT }/#{ project }"
           end
-          config[Setting::SITE_STACK].each do |sw, setup|
+          config[Setting::PROJECT_STACK].each do |sw, setup|
             case sw
             when Setting::SW_WP
-              setup_listener_for_wordpress_site(fqdn, root, setup)
+              setup_listener_for_wordpress_site(project, root, setup)
             end
           end
         end
@@ -108,7 +108,7 @@ module DOA
         puts DOA::L10n::SUCCESS_OK
       end
     end
-    
+
     def create_launcher
       if !@listen_to.empty?
         case @from.os
@@ -135,7 +135,7 @@ module DOA
       create_launcher
       start_listener
     end
-    
+
     # Stops background-listening the provided paths of the calling machine.
     def stop
       return if !File.exist?(@from.session.pid)
@@ -172,7 +172,7 @@ module DOA
         end
       }
     end
-    
+
     def start_listener
       if !@listen_to.empty?
         case @from.os

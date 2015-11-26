@@ -78,8 +78,8 @@ module DOA
 
     # Makes the default initialization.
     # Params:
-    # +hostname+:: string containing the hostname of the host machine; defaults to +'automatter.host'+
-    def self.initialize(hostname = 'automatter.host')
+    # +hostname+:: string containing the hostname of the host machine; defaults to +'doa.host'+
+    def self.initialize(hostname = 'doa.host')
       @@hostname        = hostname
       @@user_name       = ENV['USERNAME']
       @@user_home       = ENV['USERPROFILE']
@@ -374,7 +374,7 @@ module DOA
 
     # Gets the total number of CPU cores of the host machine
     def self.get_cores(os)
-      cores = 
+      cores =
         case os
         when OS::LINUX, OS::UNIX then `nproc`.to_i
         #when OS::WINDOWS then `wmic cpu get NumberOfCores /Value`.gsub("\n", '').partition('=').last.to_i

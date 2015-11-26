@@ -8,9 +8,47 @@ module DOA
       class Nginx < PuppetModule
         # Constants.
         MOD_JFRYMAN_NGINX = 'jfryman/nginx'
+        DEF_WWW_ROOT = '/var/www/public'
+        STATIC_EXTS = [
+          'atom',
+          'bmp',
+          'bz2',
+          'css',
+          'doc',
+          'eot',
+          'exe',
+          'gif',
+          'gz',
+          'htm',
+          'html',
+          'ico',
+          'jpeg',
+          'jpg',
+          'js',
+          'mid',
+          'midi',
+          'mp4',
+          'ogg',
+          'ogv',
+          'otf',
+          'png',
+          'ppt',
+          'rar',
+          'rss',
+          'rtf',
+          'svg',
+          'svgz',
+          'tar',
+          'tgz',
+          'ttf',
+          'wav',
+          'woff',
+          'xls',
+          'zip',
+        ]
 
         # Class variables.
-        @label        = 'NGINX'
+        @label        = Setting::SW_NGINX_LABEL
         @hieraclasses = ['nginx']
         @librarian    = {
           MOD_JFRYMAN_NGINX => {},
@@ -21,10 +59,12 @@ module DOA
         @supported = {
             'confd_purge' => {
               :expect  => [:boolean],
+              :maps_to => 'nginx::confd_purge',
               :mod_def => 'false',
             },
             'daemon_user' => {
               :expect  => [:puppet_interpolable_string],
+              :maps_to => 'nginx::daemon_user',
               :mod_def => {
                 'default'   => 'nginx',
                 'archlinux' => 'http',
@@ -37,21 +77,26 @@ module DOA
             },
             'events_use' => {
               :expect  => [:puppet_interpolable_string],
+              :maps_to => 'nginx::events_use',
               :mod_def => 'false',
             },
             'gzip' => {
               :expect  => [:flag],
+              :maps_to => 'nginx::gzip',
               :mod_def => 'on',
             },
             'keepalive_timeout' => {
               :expect  => [:integer],
+              :maps_to => 'nginx::keepalive_timeout',
               :mod_def => '65',
             },
             'mail' => {
               :expect  => [:boolean],
+              :maps_to => 'nginx::mail',
               :mod_def => 'false',
             },
             'manage_repo' => {
+              :maps_to => 'nginx::manage_repo',
               :mod_def => {
                 'default' => 'false',
                 'debian'  => {
@@ -70,10 +115,12 @@ module DOA
             },
             'multi_accept' => {
               :expect  => [:flag],
+              :maps_to => 'nginx::multi_accept',
               :mod_def => 'off',
             },
             'pid' => {
               :expect  => [:unix_abspath, :boolean],
+              :maps_to => 'nginx::pid',
               :mod_def => {
                 'default'   => '/var/run/nginx.pid',
                 'archlinux' => 'false',
@@ -81,6 +128,7 @@ module DOA
             },
             'root_group' => {
               :expect  => [:puppet_interpolable_string],
+              :maps_to => 'nginx::root_group',
               :mod_def => {
                 'default' => 'root',
                 'freebsd' => 'wheel',
@@ -89,22 +137,27 @@ module DOA
             },
             'sendfile' => {
               :expect  => [:flag],
+              :maps_to => 'nginx::sendfile',
               :mod_def => 'on',
             },
             'server_tokens' => {
               :expect  => [:flag],
+              :maps_to => 'nginx::server_tokens',
               :mod_def => 'on',
             },
             'spdy' => {
               :expect  => [:flag],
+              :maps_to => 'nginx::spdy',
               :mod_def => 'off',
             },
             'super_user' => {
               :expect  => [:boolean],
+              :maps_to => 'nginx::super_user',
               :mod_def => 'true',
             },
             'vhost_purge' => {
               :expect  => [:boolean],
+              :maps_to => 'nginx::vhost_purge',
               :mod_def => 'false',
             },
             'client' => {
@@ -113,12 +166,12 @@ module DOA
                   :children => {
                     'buffer_size' => {
                       :expect  => [:puppet_interpolable_string],
-                      :maps_to => 'client_body_buffer_size',
+                      :maps_to => 'nginx::client_body_buffer_size',
                       :mod_def => '128k',
                     },
                     'temp_path' => {
                       :expect  => [:unix_abspath],
-                      :maps_to => 'client_body_temp_path',
+                      :maps_to => 'nginx::client_body_temp_path',
                       :mod_def => {
                         'default' => '/var/nginx/client_body_temp',
                         'openbsd' => '/var/www/client_body_temp',
@@ -126,7 +179,7 @@ module DOA
                     },
                     'max_size' => {
                       :expect  => [:puppet_interpolable_string],
-                      :maps_to => 'client_max_body_size',
+                      :maps_to => 'nginx::client_max_body_size',
                       :mod_def => '10m',
                     },
                   },
@@ -137,7 +190,7 @@ module DOA
               :children => {
                 'conf' => {
                   :expect  => [:unix_abspath],
-                  :maps_to => 'conf_dir',
+                  :maps_to => 'nginx::conf_dir',
                   :mod_def => {
                     'default' => '/etc/nginx',
                     'freebsd' => '/usr/local/etc/nginx',
@@ -146,7 +199,7 @@ module DOA
                 },
                 'log' => {
                   :expect  => [:unix_abspath],
-                  :maps_to => 'logdir',
+                  :maps_to => 'nginx::logdir',
                   :mod_def => {
                     'default' => '/var/log/nginx',
                     'openbsd' => '/var/www/logs',
@@ -154,7 +207,7 @@ module DOA
                 },
                 'run' => {
                   :expect  => [:unix_abspath],
-                  :maps_to => 'run_dir',
+                  :maps_to => 'nginx::run_dir',
                   :mod_def => {
                     'default' => '/var/nginx',
                     'openbsd' => '/var/www',
@@ -162,7 +215,7 @@ module DOA
                 },
                 'temp' => {
                   :expect  => [:unix_abspath],
-                  :maps_to => 'temp_dir',
+                  :maps_to => 'nginx::temp_dir',
                   :mod_def => '/tmp',
                 },
               },
@@ -173,37 +226,37 @@ module DOA
                   :children => {
                     'inactive' => {
                       :expect  => [:puppet_interpolable_string],
-                      :maps_to => 'fastcgi_cache_inactive',
+                      :maps_to => 'nginx::fastcgi_cache_inactive',
                       :mod_def => '20m',
                     },
                     'key' => {
                       :expect  => [:puppet_interpolable_string],
-                      :maps_to => 'fastcgi_cache_key',
+                      :maps_to => 'nginx::fastcgi_cache_key',
                       :mod_def => 'false',
                     },
                     'keys_zone' => {
                       :expect  => [:puppet_interpolable_string],
-                      :maps_to => 'fastcgi_cache_keys_zone',
+                      :maps_to => 'nginx::fastcgi_cache_keys_zone',
                       :mod_def => 'd3:100m',
                     },
                     'levels' => {
                       :expect  => [:level],
-                      :maps_to => 'fastcgi_cache_levels',
+                      :maps_to => 'nginx::fastcgi_cache_levels',
                       :mod_def => '1',
                     },
                     'max_size' => {
                       :expect  => [:puppet_interpolable_string],
-                      :maps_to => 'fastcgi_cache_max_size',
+                      :maps_to => 'nginx::fastcgi_cache_max_size',
                       :mod_def => '500m',
                     },
                     'path' => {
                       :expect  => [:unix_abspath],
-                      :maps_to => 'fastcgi_cache_path',
+                      :maps_to => 'nginx::fastcgi_cache_path',
                       :mod_def => 'false',
                     },
                     'use_stale' => {
                       :expect  => [:puppet_interpolable_string],
-                      :maps_to => 'fastcgi_cache_use_stale',
+                      :maps_to => 'nginx::fastcgi_cache_use_stale',
                       :mod_def => 'false',
                     },
                   },
@@ -214,12 +267,12 @@ module DOA
               :children => {
                 'owner' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'global_owner',
+                  :maps_to => 'nginx::global_owner',
                   :mod_def => 'root',
                 },
                 'group' => {
                   :expect  => [:chmod],
-                  :maps_to => 'global_group',
+                  :maps_to => 'nginx::global_group',
                   :mod_def => {
                     'default' => 'root',
                     'freebsd' => 'wheel',
@@ -228,7 +281,7 @@ module DOA
                 },
                 'mode' => {
                   :expect  => [:chmod],
-                  :maps_to => 'global_mode',
+                  :maps_to => 'nginx::global_mode',
                   :mod_def => '0644',
                 },
               },
@@ -237,19 +290,19 @@ module DOA
               :children => {
                 'cfg_append' => {
                   :expect  => [:array, :hash_values],
-                  :maps_to => 'http_cfg_append',
+                  :maps_to => 'nginx::http_cfg_append',
                   :mod_def => 'false',
                 },
                 'tcp' => {
                   :children => {
                     'nodelay' => {
                       :expect  => [:flag],
-                      :maps_to => 'http_tcp_nodelay',
+                      :maps_to => 'nginx::http_tcp_nodelay',
                       :mod_def => 'on',
                     },
                     'nopush' => {
                       :expect  => [:flag],
-                      :maps_to => 'http_tcp_nopush',
+                      :maps_to => 'nginx::http_tcp_nopush',
                       :mod_def => 'off',
                     },
                   },
@@ -260,7 +313,7 @@ module DOA
               :children => {
                 'access' => {
                   :expect  => [:unix_abspath],
-                  :maps_to => 'http_access_log',
+                  :maps_to => 'nginx::http_access_log',
                   :mod_def => {
                     'default' => '/var/log/nginx/access.log',
                     'openbsd' => '/var/www/logs/access.log',
@@ -268,7 +321,7 @@ module DOA
                 },
                 'error' => {
                   :expect  => [:unix_abspath],
-                  :maps_to => 'nginx_error_log',
+                  :maps_to => 'nginx::nginx_error_log',
                   :mod_def => {
                     'default' => '/var/log/nginx/error.log',
                     'openbsd' => '/var/www/logs/error.log',
@@ -276,7 +329,7 @@ module DOA
                 },
                 'format' => {
                   :expect  => [:hash_values],
-                  :maps_to => 'log_format',
+                  :maps_to => 'nginx::log_format',
                 },
               },
             },
@@ -284,12 +337,12 @@ module DOA
               :children => {
                 'bucket_size' => {
                   :expect  => [:integer],
-                  :maps_to => 'names_hash_bucket_size',
+                  :maps_to => 'nginx::names_hash_bucket_size',
                   :mod_def => '64',
                 },
                 'max_size' => {
                   :expect  => [:integer],
-                  :maps_to => 'names_hash_max_size',
+                  :maps_to => 'nginx::names_hash_max_size',
                   :mod_def => '512',
                 },
               },
@@ -299,7 +352,7 @@ module DOA
                 'ensure' => {
                   :expect  => [:puppet_interpolable_string],
                   :allow   => ['absent', 'purged', 'present', 'installed', 'latest', 'held'],
-                  :maps_to => 'package_ensure',
+                  :maps_to => 'nginx::package_ensure',
                   :mod_def => 'present',
                   :doa_def => {
                     :dev   => 'latest',
@@ -309,7 +362,7 @@ module DOA
                 },
                 'name' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'package_name',
+                  :maps_to => 'nginx::package_name',
                   :mod_def => {
                     'default' => 'nginx',
                     'gentoo'  => 'www-servers/nginx',
@@ -318,12 +371,12 @@ module DOA
                 },
                 'source' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'package_source',
+                  :maps_to => 'nginx::package_source',
                   :mod_def => 'nginx',
                 },
                 'flavor' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'package_flavor',
+                  :maps_to => 'nginx::package_flavor',
                 },
               },
             },
@@ -331,75 +384,75 @@ module DOA
               :children => {
                 'buffers' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'proxy_buffers',
+                  :maps_to => 'nginx::proxy_buffers',
                   :mod_def => '32 4k',
                 },
                 'buffer_size' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'proxy_buffer_size',
+                  :maps_to => 'nginx::proxy_buffer_size',
                   :mod_def => '8k',
                 },
                 'cache' => {
                   :children => {
                     'inactive' => {
                       :expect  => [:puppet_interpolable_string],
-                      :maps_to => 'proxy_cache_inactive',
+                      :maps_to => 'nginx::proxy_cache_inactive',
                       :mod_def => '20m',
                     },
                     'keys_zone' => {
                       :expect  => [:puppet_interpolable_string],
-                      :maps_to => 'proxy_cache_keys_zone',
+                      :maps_to => 'nginx::proxy_cache_keys_zone',
                       :mod_def => 'd2:100m',
                     },
                     'levels' => {
                       :expect  => [:level],
-                      :maps_to => 'proxy_cache_levels',
+                      :maps_to => 'nginx::proxy_cache_levels',
                       :mod_def => '1',
                     },
                     'max_size' => {
                       :expect  => [:puppet_interpolable_string],
-                      :maps_to => 'proxy_cache_max_size',
+                      :maps_to => 'nginx::proxy_cache_max_size',
                       :mod_def => '500m',
                     },
                     'path' => {
                       :expect  => [:unix_abspath],
-                      :maps_to => 'proxy_cache_path',
+                      :maps_to => 'nginx::proxy_cache_path',
                       :mod_def => 'false',
                     },
                   },
                 },
                 'connect_timeout' => {
                   :expect  => [:integer],
-                  :maps_to => 'proxy_connect_timeout',
+                  :maps_to => 'nginx::proxy_connect_timeout',
                   :mod_def => '90',
                 },
                 'headers_hash_bucket_size' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'proxy_headers_hash_bucket_size',
+                  :maps_to => 'nginx::proxy_headers_hash_bucket_size',
                   :mod_def => '64',
                 },
                 'http_version' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'proxy_http_version',
+                  :maps_to => 'nginx::proxy_http_version',
                 },
                 'read_timeout' => {
                   :expect  => [:integer],
-                  :maps_to => 'proxy_read_timeout',
+                  :maps_to => 'nginx::proxy_read_timeout',
                   :mod_def => '90',
                 },
                 'redirect' => {
                   :expect  => [:flag],
-                  :maps_to => 'proxy_redirect',
+                  :maps_to => 'nginx::proxy_redirect',
                   :mod_def => 'off',
                 },
                 'send_timeout' => {
                   :expect  => [:integer],
-                  :maps_to => 'proxy_send_timeout',
+                  :maps_to => 'nginx::proxy_send_timeout',
                   :mod_def => '90',
                 },
                 'set_header' => {
                   :expect  => [:array],
-                  :maps_to => 'proxy_set_header',
+                  :maps_to => 'nginx::proxy_set_header',
                   :mod_def => [
                     'Host $host',
                     'X-Real-IP $remote_addr',
@@ -407,7 +460,7 @@ module DOA
                   ],
                 },
                 'temp_path' => {
-                  :maps_to => 'proxy_temp_path',
+                  :maps_to => 'nginx::proxy_temp_path',
                 },
               },
             },
@@ -415,27 +468,28 @@ module DOA
               :children => {
                 'configtest_enable' => {
                   :expect  => [:boolean],
+                  :maps_to => 'nginx::configtest_enable',
                   :mod_def => 'false',
                 },
                 'ensure' => {
                   :expect  => [:puppet_interpolable_string],
                   :allow   => ['running', 'stopped', 'absent'],
-                  :maps_to => 'service_ensure',
+                  :maps_to => 'nginx::service_ensure',
                   :mod_def => 'running'
                 },
                 # Specify a string of flags to pass to the startup script
                 'flags' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'service_flags',
+                  :maps_to => 'nginx::service_flags',
                 },
                 'name' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'service_name',
+                  :maps_to => 'nginx::service_name',
                   :mod_def => 'nginx',
                 },
                 'restart' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'service_restart',
+                  :maps_to => 'nginx::service_restart',
                   :mod_def => '/etc/init.d/nginx configtest && /etc/init.d/nginx restart',
                 },
               },
@@ -444,12 +498,12 @@ module DOA
               :children => {
                 'owner' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'sites_available_owner',
+                  :maps_to => 'nginx::sites_available_owner',
                   :mod_def => 'root',
                 },
                 'group' => {
                   :expect  => [:puppet_interpolable_string],
-                  :maps_to => 'sites_available_group',
+                  :maps_to => 'nginx::sites_available_group',
                   :mod_def => {
                     'default' => 'root',
                     'freebsd' => 'wheel',
@@ -458,7 +512,7 @@ module DOA
                 },
                 'mode' => {
                   :expect  => [:chmod],
-                  :maps_to => 'sites_available_mode',
+                  :maps_to => 'nginx::sites_available_mode',
                   :mod_def => '0644',
                 },
               },
@@ -467,12 +521,12 @@ module DOA
               :children => {
                 'conf' => {
                   :expect  => [:unix_relpath],
-                  :maps_to => 'conf_template',
+                  :maps_to => 'nginx::conf_template',
                   :mod_def => 'nginx/conf.d/nginx.conf.erb',
                 },
                 'proxy_conf' => {
                   :expect  => [:unix_relpath],
-                  :maps_to => 'proxy_conf_template',
+                  :maps_to => 'nginx::proxy_conf_template',
                   :mod_def => 'nginx/conf.d/proxy.conf.erb',
                 },
               },
@@ -481,12 +535,12 @@ module DOA
               :children => {
                 'bucket_size' => {
                   :expect  => [:integer],
-                  :maps_to => 'types_hash_bucket_size',
+                  :maps_to => 'nginx::types_hash_bucket_size',
                   :mod_def => '512',
                 },
                 'max_size' => {
                   :expect  => [:integer],
-                  :maps_to => 'types_hash_max_size',
+                  :maps_to => 'nginx::types_hash_max_size',
                   :mod_def => '1024',
                 },
               },
@@ -495,23 +549,23 @@ module DOA
               :children => {
                 'connections' => {
                   :expect  => [:integer],
-                  :maps_to => 'worker_connections',
+                  :maps_to => 'nginx::worker_connections',
                   :mod_def => '1024',
                 },
                 'processes' => {
                   :expect  => [:integer, :auto],
-                  :maps_to => 'worker_processes',
+                  :maps_to => 'nginx::worker_processes',
                   :mod_def => '1',
                 },
                 'rlimit_nofile' => {
                   :expect  => [:integer],
-                  :maps_to => 'worker_rlimit_nofile',
+                  :maps_to => 'nginx::worker_rlimit_nofile',
                   :mod_def => '1024',
                 },
               },
             },
             'vhosts' => {
-              :maps_to  => 'nginx_vhosts',
+              :maps_to  => 'nginx::nginx_vhosts',
               :children_hash  => {
                 # Adds headers to the HTTP response when response code is equal to 200, 204, 301, 302 or 304.
                 'add_header' => {
@@ -1081,7 +1135,7 @@ module DOA
               },
             },
             'locations' => {
-              :maps_to  => 'nginx_locations',
+              :maps_to  => 'nginx::nginx_locations',
               :children_hash  => {
                 'auth_basic' => {
                   :children => {
@@ -1356,6 +1410,30 @@ module DOA
                 },
               },
             },
+            'upstreams' => {
+              :maps_to  => 'nginx::nginx_upstreams',
+              :children_hash  => {
+                # Array of member URIs for NGINX to connect to. Must follow valid NGINX syntax.
+                'members' => {
+                  :expect  => [:array],
+                },
+                # Enables or disables the specified location
+                'ensure' => {
+                  :expect  => [:puppet_interpolable_string],
+                  :allow   => ['absent', 'present'],
+                  :mod_def => 'present',
+                },
+                # It expects a hash with custom directives to put before anything else inside upstream
+                'cfg_prepend' => {
+                  :expect  => [:hash_values],
+                },
+                # Set the fail_timeout for the upstream
+                'fail_timeout' => {
+                  :expect  => [:puppet_interpolable_string],
+                  :mod_def => '10s',
+                },
+              },
+            },
           }
 
         def self.set_hiera_param(value, yaml_param, set = true)
@@ -1363,14 +1441,86 @@ module DOA
           # Children settings are processed before parent, so `ensure` is already set if present
           if !Puppet.sw_stack.has_key?(@label) or !Puppet.sw_stack[@label].has_key?(@supported[yaml_param][:children]['ensure'][:maps_to])
             maps_to = @supported[yaml_param][:children]['ensure'].has_key?(:maps_to) ? @supported[yaml_param][:children]['ensure'][:maps_to] : yaml_param
-            DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
-              maps_to => "'#{ @supported[yaml_param][:children]['ensure'][:doa_def][DOA::Guest.env] }'"
+            Provisioner::Puppet.enqueue_hiera_params(@label, {
+              maps_to => "'#{ @supported[yaml_param][:children]['ensure'][:doa_def][Guest.env] }'"
             })
           end
 
           doa_def = get_default_value(@supported[yaml_param], :doa_def)
           mod_def = get_default_value(@supported[yaml_param], :mod_def)
           return doa_def ? doa_def : mod_def
+        end
+
+        def self.custom_setup(provided)
+          if Guest.provisioner.current_stack.has_key?(Setting::SW_WP)
+            # Guess if WordPress must be installed in a subdirectory or not
+            subdir   = Tools.get_puppet_mod_prioritized_def_value([Setting::SW_WP, 'wp', 'subdirectory'], Setting::PM_WP)
+            subdir   = subdir.empty? ? '' : (['true', 'on', 'yes', '1'].include?(subdir.to_s) ? Guest.provisioner.current_project : subdir)
+            www_root = Tools.get_puppet_mod_prioritized_def_value([Setting::SW_WP, 'wp', 'install', 'dir'], Setting::PM_WP)
+            www_root = Provisioner::Puppet::WordPress::DEF_INSTALL_DIR if www_root.empty?
+            socket   = Tools.get_puppet_mod_prioritized_def_value([Setting::SW_PHP, 'fpm', 'pools', '*', 'listen', 'socket'], Setting::PM_WP)
+            if Tools.valid_ipv4_port?(socket)
+              upstream_member = socket
+            elsif Tools.valid_unix_abspath?(socket)
+              upstream_member = "unix:#{ socket }"
+            else
+              upstream_member = '127.0.0.1:9000'
+            end
+            Provisioner::Puppet.enqueue_hiera_params(@label, {
+              @supported['vhosts'][:maps_to] => {
+                "'#{ Guest.provisioner.current_project }'" => {
+                  'ensure'                => "'present'",
+                  'listen_port'           => "'80'",
+                  'spdy'                  => "'on'",
+                  'use_default_location'  => 'false',
+                  'www_root'              => "'#{ www_root }'",
+                  'index_files'           => ["'index.html'", "'index.htm'", "'index.php'"],
+                },
+              },
+              @supported['locations'][:maps_to] => {
+                "'#{ Guest.provisioner.current_project }_wp_static'" => {
+                  'ensure'              => "'present'",
+                  'vhost'               => "'#{ Guest.provisioner.current_project }'",
+                  #'location'            => "'~* ^/#{ Guest.provisioner.current_project }(/.+\\.(?:ogg|ogv|svg|svgz|eot|otf|woff|mp4|ttf|rss|atom|jpg|jpeg|gif|png|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|tar|mid|midi|wav|bmp|rtf|js|css|htm|html))$'",
+                  #'location'            => "'~* ^/#{ Guest.provisioner.current_project }/.+\\.(?:#{ STATIC_EXTS.join('|') })$'",
+                  'location'            => "'~* ^" + (subdir ? "/#{ subdir }" : '') + "/.+\\.(?:#{ STATIC_EXTS.join('|') })$'",
+                  'location_custom_cfg' => {
+                    "'expires'"         => "'max'",
+                    "'access_log'"      => "'off'",
+                    #{}"'try_files'"       => "'$1 =403'",
+                  },
+                },
+                "'#{ Guest.provisioner.current_project }_wp_php'" => {
+                  'ensure'                      => "'present'",
+                  'vhost'                       => "'#{ Guest.provisioner.current_project }'",
+                  #'try_files'                 => ["'/$1'", "'/$1/'", "'/index.php?$args'", "'=404'"],
+                  'try_files'                   => [
+                    "'$uri'",
+                    "'$uri/'",
+                    "'" + (subdir ? "/#{ subdir }" : '') + "/index.php?$args'",
+                  ],
+                  'fastcgi'                     => "'php'",
+                  'fastcgi_param'               => {
+                    "'SCRIPT_FILENAME'"         => "'$document_root$fastcgi_script_name'",
+                  },
+                  #'location'                  => "'~* ^/#{ Guest.provisioner.current_project }/?(.*)$'",
+                  'location'                    => "/#{ subdir }",
+                  'location_cfg_append'         => {
+                    "'fastcgi_connect_timeout'" => "'3m'",
+                    "'fastcgi_read_timeout'"    => "'3m'",
+                    "'fastcgi_send_timeout'"    => "'3m'",
+                    "'fastcgi_index'"           => "'index.php'",
+                  },
+                },
+              },
+              @supported['upstreams'][:maps_to] => {
+                "'php'" => {
+                  'ensure'  => "'present'",
+                  'members' => ["'#{ upstream_member }'"],
+                },
+              },
+            })
+          end
         end
       end
     end

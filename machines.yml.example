@@ -4,10 +4,9 @@ dev:
   cpus: 1
   memory: 512
   hostname: 'dev'
-  fqdn: 'dev.automatter.guest'
+  fqdn: 'dev.doa.guest'
   sync:
     exclude:
       - '.meteor/*'
     listen:
       '../myplugin': '~/myplugin'
-    

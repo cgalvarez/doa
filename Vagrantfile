@@ -25,7 +25,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   machines.each do |name, settings|
     config.vm.define name do |machine|
       DOA::Guest.load(name, settings)
-      machine_exist = DOA::Guest.provider.exist?(DOA::Guest.provider_vname)
+      machine_exists = DOA::Guest.provider.exist?(DOA::Guest.provider_vname)
 
       # Setup virtual machine
       machine.vm.box = DOA::Guest.box
@@ -41,7 +41,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       machine.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
 
       # Configure the latest version of the desired provisioner in the guest
-      if DOA::Guest.provision or !machine_exist
+      if DOA::Guest.provision or !machine_exists
         case DOA::Guest.provisioner.class.const_get(:TYPE)
         when DOA::Provisioner::Docker::TYPE then
           # Docker provisioning
@@ -74,7 +74,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         DOA::Guest.add_session_keys
 
         # Setup the provision for the desired guest machine stack by the user
-        if DOA::Guest.provision or !machine_exist
+        if DOA::Guest.provision or !machine_exists
           case DOA::Guest.provisioner.class.const_get(:TYPE)
           when DOA::Provisioner::Docker::TYPE then
             # Docker provisioning
@@ -100,7 +100,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       end
 
       machine.trigger.before [:ssh] do
-        DOA::Host.reload_authorized_keys
+        #DOA::Host.reload_authorized_keys
       end
 
       # Guest virtual machine setup
