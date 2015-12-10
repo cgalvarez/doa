@@ -48,7 +48,7 @@ module DOA
         ]
 
         # Class variables.
-        @label        = Setting::SW_NGINX_LABEL
+        @label        = DOA::Setting::SW_NGINX_LABEL
         @hieraclasses = ['nginx']
         @librarian    = {
           MOD_JFRYMAN_NGINX => {},
@@ -1439,10 +1439,10 @@ module DOA
         def self.set_hiera_param(value, yaml_param, set = true)
           # Check if `ensure` provided, and set it depending on environment type
           # Children settings are processed before parent, so `ensure` is already set if present
-          if !Puppet.sw_stack.has_key?(@label) or !Puppet.sw_stack[@label].has_key?(@supported[yaml_param][:children]['ensure'][:maps_to])
+          if !DOA::Provisioner::Puppet.sw_stack.has_key?(@label) or !DOA::Provisioner::Puppet.sw_stack[@label].has_key?(@supported[yaml_param][:children]['ensure'][:maps_to])
             maps_to = @supported[yaml_param][:children]['ensure'].has_key?(:maps_to) ? @supported[yaml_param][:children]['ensure'][:maps_to] : yaml_param
-            Provisioner::Puppet.enqueue_hiera_params(@label, {
-              maps_to => "'#{ @supported[yaml_param][:children]['ensure'][:doa_def][Guest.env] }'"
+            DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
+              maps_to => "'#{ @supported[yaml_param][:children]['ensure'][:doa_def][DOA::Guest.env] }'"
             })
           end
 
@@ -1452,23 +1452,23 @@ module DOA
         end
 
         def self.custom_setup(provided)
-          if Guest.provisioner.current_stack.has_key?(Setting::SW_WP)
+          if DOA::Guest.provisioner.current_stack.has_key?(DOA::Setting::SW_WP)
             # Guess if WordPress must be installed in a subdirectory or not
-            subdir   = Tools.get_puppet_mod_prioritized_def_value([Setting::SW_WP, 'wp', 'subdirectory'], Setting::PM_WP)
-            subdir   = subdir.empty? ? '' : (['true', 'on', 'yes', '1'].include?(subdir.to_s) ? Guest.provisioner.current_project : subdir)
-            www_root = Tools.get_puppet_mod_prioritized_def_value([Setting::SW_WP, 'wp', 'install', 'dir'], Setting::PM_WP)
-            www_root = Provisioner::Puppet::WordPress::DEF_INSTALL_DIR if www_root.empty?
-            socket   = Tools.get_puppet_mod_prioritized_def_value([Setting::SW_PHP, 'fpm', 'pools', '*', 'listen', 'socket'], Setting::PM_WP)
-            if Tools.valid_ipv4_port?(socket)
+            subdir   = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_WP, 'wp', 'subdirectory'], DOA::Setting::PM_WP)
+            subdir   = subdir.empty? ? '' : (['true', 'on', 'yes', '1'].include?(subdir.to_s) ? DOA::Guest.provisioner.current_project : subdir)
+            www_root = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_WP, 'wp', 'install', 'dir'], DOA::Setting::PM_WP)
+            www_root = DOA::Provisioner::Puppet::WordPress::DEF_INSTALL_DIR if www_root.empty?
+            socket   = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_PHP, 'fpm', 'pools', '*', 'listen', 'socket'], DOA::Setting::PM_WP)
+            if DOA::Tools.valid_ipv4_port?(socket)
               upstream_member = socket
-            elsif Tools.valid_unix_abspath?(socket)
+            elsif DOA::Tools.valid_unix_abspath?(socket)
               upstream_member = "unix:#{ socket }"
             else
               upstream_member = '127.0.0.1:9000'
             end
-            Provisioner::Puppet.enqueue_hiera_params(@label, {
+            DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
               @supported['vhosts'][:maps_to] => {
-                "'#{ Guest.provisioner.current_project }'" => {
+                "'#{ DOA::Guest.provisioner.current_project }'" => {
                   'ensure'                => "'present'",
                   'listen_port'           => "'80'",
                   'spdy'                  => "'on'",
@@ -1478,9 +1478,9 @@ module DOA
                 },
               },
               @supported['locations'][:maps_to] => {
-                "'#{ Guest.provisioner.current_project }_wp_static'" => {
+                "'#{ DOA::Guest.provisioner.current_project }_wp_static'" => {
                   'ensure'              => "'present'",
-                  'vhost'               => "'#{ Guest.provisioner.current_project }'",
+                  'vhost'               => "'#{ DOA::Guest.provisioner.current_project }'",
                   #'location'            => "'~* ^/#{ Guest.provisioner.current_project }(/.+\\.(?:ogg|ogv|svg|svgz|eot|otf|woff|mp4|ttf|rss|atom|jpg|jpeg|gif|png|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|tar|mid|midi|wav|bmp|rtf|js|css|htm|html))$'",
                   #'location'            => "'~* ^/#{ Guest.provisioner.current_project }/.+\\.(?:#{ STATIC_EXTS.join('|') })$'",
                   'location'            => "'~* ^" + (subdir ? "/#{ subdir }" : '') + "/.+\\.(?:#{ STATIC_EXTS.join('|') })$'",
@@ -1490,9 +1490,9 @@ module DOA
                     #{}"'try_files'"       => "'$1 =403'",
                   },
                 },
-                "'#{ Guest.provisioner.current_project }_wp_php'" => {
+                "'#{ DOA::Guest.provisioner.current_project }_wp_php'" => {
                   'ensure'                      => "'present'",
-                  'vhost'                       => "'#{ Guest.provisioner.current_project }'",
+                  'vhost'                       => "'#{ DOA::Guest.provisioner.current_project }'",
                   #'try_files'                 => ["'/$1'", "'/$1/'", "'/index.php?$args'", "'=404'"],
                   'try_files'                   => [
                     "'$uri'",

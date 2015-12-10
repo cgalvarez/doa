@@ -16,7 +16,8 @@ module DOA
     FAIL_NOT_FOUND_ENV  = "[#{ 'ENV'.colorize(:red) }]"
     FAIL_NOT_FOUND_FS   = "[#{ 'FS'.colorize(:red) }]"
     FAIL_NOT_FOUND_PATH = "[#{ 'PATH'.colorize(:red) }]"
-    NOT_RUNNING         = "[#{ 'NOT RUNNING'.colorize(:yellow) }]"
+    WARNING_NOT_RUNNING = "[#{ 'NOT RUNNING'.colorize(:yellow) }]"
+    FAIL_EMPTY_PID      = "[#{ 'EMPTY PID'.colorize(:red) }]"
 
     # host.rb
     HOST_HOSTS_GUEST_ENTRY = "%s Managing guest entry in @ %s:%s... %s"
@@ -24,6 +25,8 @@ module DOA
     CONN_CLOSED = "%s Connection terminated or wrong password entered. Please, try again...".colorize(:red)
     MAX_RETRIES_REACHED = "%s Aborting... Maximum number of retries reached...".colorize(:red)
     RELOADING_AUTH_KEYS = "%s Reloading authorized keys... %s"
+    FULL_INITIAL_BIRSYNC = "%s Performing full initial %s <-> bidi-rsyncing (be patient)... "
+    FAILED_SYNC = "%s Initial sync failed for:\n%s\n"
 
     # guest.rb
     SCP_PPK = "%s Secure copy of new session private key into %s... "

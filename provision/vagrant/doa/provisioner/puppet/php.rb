@@ -455,7 +455,7 @@ module DOA
         def self.set_hiera_param(value, yaml_param, set = true)
           # Check if `ensure` provided, and set it depending on environment type
           # Children settings are processed before parent, so `ensure` is already set if present
-          if !Puppet.sw_stack.has_key?(@label) or !Puppet.sw_stack[@label].has_key?(@supported[yaml_param][:children]['ensure'][:maps_to])
+          if !DOA::Provisioner::Puppet.sw_stack.has_key?(@label) or !DOA::Provisioner::Puppet.sw_stack[@label].has_key?(@supported[yaml_param][:children]['ensure'][:maps_to])
             maps_to = @supported[yaml_param][:children]['ensure'].has_key?(:maps_to) ? @supported[yaml_param][:children]['ensure'][:maps_to] : yaml_param
             DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
               #@supported[yaml_param][:children]['ensure'][:maps_to] => "'#{ @supported[yaml_param][:children]['ensure'][:doa_def][DOA::Guest.env] }"

@@ -11,17 +11,23 @@ module DOA
         DEF_INSTALL_DIR = '/opt/wordpress'
 
         # Class variables.
-        @label        = Setting::PM_WP
+        @label        = DOA::Setting::PM_WP
         @hieraclasses = ['wordpress']
         @librarian    = {
-          MOD_CGALVAREZ_WORDPRESS => {},
+          MOD_CGALVAREZ_WORDPRESS => {
+            :git  => 'git://github.com/cgalvarez/puppet-wordpress.git',
+            :ver  => '1.0.0',
+          },
         }
+        @from_path    = nil
+        @to_path      = nil
+        @path         = {}
 
         # Puppet modules parameters.
         # jfryman/nginx => https://github.com/jfryman/puppet-nginx
         @supported = {
             'instances' => {
-              :maps_to  => 'wordpress::wp_instances',
+              :maps_to  => 'wordpress::instances',
               :children_hash  => {
                 'db' => {
                   :children => {
@@ -128,20 +134,31 @@ module DOA
                         },
                       },
                     },
+                    # Exclude shell patterns for rsync (used as provided)
+                    'exclude' => {
+                      :expect     => [:array],
+                      :cb_process => "#{ self.to_s }#setup_presync_excludes",
+                    },
                     # Specifies the group of the wordpress files
                     'group' => {
                       :expect  => [:string],
-                      :mod_def => '0',
                       :maps_to => 'wp_group',
+                      :mod_def => '0',
+                      :doa_def => DOA::Guest::USER,
+                    },
+                    # Ignore regex patterns for ruby gem listen (appended to WordPress install dir)
+                    'ignore' => {
+                      :expect  => [:array],
+                      :cb_process => "#{ self.to_s }#setup_listen_ignores",
                     },
                     'install' => {
                       :children => {
                         # Specifies the directory into which wordpress should be installed
                         'dir' => {
-                          #:expect     => [:unix_abspath],
+                          :expect     => [:boolean, :unix_relpath],
                           :maps_to    => 'install_dir',
                           :mod_def    => DEF_INSTALL_DIR,
-                          :cb_process => "#{ self.to_s }#set_install_dir",
+                          :cb_process => "#{ self.to_s }#get_install_dir",
                         },
                         # Specifies the url from which the wordpress tarball should be downloaded
                         'url' => {
@@ -168,8 +185,9 @@ module DOA
                     # exists as this module does not attempt to create it if missing.
                     'owner' => {
                       :expect  => [:string],
-                      :mod_def => 'root',
                       :maps_to => 'wp_owner',
+                      :mod_def => 'root',
+                      :doa_def => DOA::Guest::USER,
                     },
                     'proxy' => {
                       :children => {
@@ -208,9 +226,27 @@ module DOA
                     },
                   },
                 },
+                'plugins' => {
+                  :expect     => [:hash],
+                  :cb_process => "#{ self.to_s }#setup_assets@#{ DOA::Setting::WP_ASSET_PLUGIN }",
+                },
+                'themes' => {
+                  :expect     => [:hash],
+                  :cb_process => "#{ self.to_s }#setup_assets@#{ DOA::Setting::WP_ASSET_THEME }",
+                },
               },
             },
           }
+
+        def self.get_path(sync)
+          @from_path = "#{ DOA::Host.session.guest_projects_path }/#{ DOA::Guest.provisioner.current_project }" if @from_path.nil?
+          @to_path   = get_install_dir if @to_path.nil?
+          if sync.from.instance.instance_of?(Host)
+            @path[:from], @path[:to] = @from_path, @to_path
+          elsif sync.from.instance.instance_of?(Guest)
+            @path[:from], @path[:to] = @to_path, @from_path
+          end
+        end
 
         # Adds the required parameters to the corresponding queues:
         #  - Puppet Forge modules (loaded through librarian-puppet -> Puppetfile)
@@ -220,29 +256,44 @@ module DOA
         # setting the appropriate values.
         def self.setup(settings)
           @provided = settings
-          Provisioner::Puppet.enqueue_librarian_mods(@librarian) if @librarian.is_a?(Hash) and !@librarian.blank?
-          Provisioner::Puppet.enqueue_hiera_classes(@hieraclasses) if @hieraclasses.is_a?(Array) and !@hieraclasses.blank?
-          Provisioner::Puppet.enqueue_hiera_params(@label, set_params(@supported,
+          DOA::Provisioner::Puppet.enqueue_librarian_mods(@librarian) if @librarian.is_a?(Hash) and !@librarian.blank?
+          DOA::Provisioner::Puppet.enqueue_hiera_classes(@hieraclasses) if @hieraclasses.is_a?(Array) and !@hieraclasses.blank?
+          DOA::Provisioner::Puppet.enqueue_hiera_params(@label, set_params(@supported,
             (!settings.nil? and settings.is_a?(Hash)) ? {'instances' => {
-              Guest.provisioner.current_project.nil? ? 'base' : Guest.provisioner.current_project => settings }
+              DOA::Guest.provisioner.current_project.nil? ? 'base' : DOA::Guest.provisioner.current_project => settings }
             } : {})) if !@supported.empty?
 
           # Install development software when installing WordPress in development
           # environment unless explicitly stated the opposite
           # --------------------------------------------------------------------
-          case Guest.env
+          case DOA::Guest.env
           when :dev
+            # Continous listening through bidirectional rsync for WordPress installation folder with ruby gem guard/listen
+            [DOA::Host.sync, DOA::Guest.sync].each do |sync|
+              get_path(sync)
+              if sync.from.instance.instance_of?(Host) and !File.exists?(@path[:from])
+                require 'fileutils'
+                FileUtils.mkdir_p @path[:from]
+              end
+              sync.listen_to.insert(-1, @path[:from])
+              sync.conditions[@path[:from]] = [
+                  "from = path.gsub('#{ @path[:from] }', '#{ DOA::SSH.escape(sync.from.os, @path[:from]) }')",
+                  "to = path.gsub('#{ @path[:from] }', '#{ DOA::SSH.escape(sync.to.os, @path[:to]) }')",
+                ]
+              add_excludes(sync)
+            end
+
             # XDebug (PHP extension)
-            xdebug_ensure = Tools.get_puppet_mod_prioritized_def_value([Setting::SW_PHP, 'extensions', 'xdebug', 'ensure'], Setting::PM_PHP)
+            xdebug_ensure = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_PHP, 'extensions', 'xdebug', 'ensure'], DOA::Setting::PM_PHP)
             if !['absent', 'purged'].include?(xdebug_ensure)
-              php      = Provisioner::Puppet.const_get(Setting::PM_PHP)
-              provided = Tools.get_puppet_mod_prioritized_def_value([Setting::SW_PHP, 'extensions', 'xdebug'], Setting::PM_PHP)
+              php      = DOA::Provisioner::Puppet.const_get(DOA::Setting::PM_PHP)
+              provided = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_PHP, 'extensions', 'xdebug'], DOA::Setting::PM_PHP)
               defaults = {
                 'settings' => {
                   'xdebug.remote_connect_back'      => 1,
                   'xdebug.remote_enable'            => 1,
                   'xdebug.remote_handler'           => 'dbgp',
-                  'xdebug.remote_host'              => "#{ Host.ip }",
+                  'xdebug.remote_host'              => "#{ DOA::Host.ip }",
                   'xdebug.remote_port'              => 9000,
                   'xdebug.profiler_enable'          => 1,
                   'xdebug.profiler_enable_trigger'  => 1,
@@ -250,19 +301,106 @@ module DOA
                   'xdebug.profiler_output_name'     => 'profile.%R-%u',
                 },
               }
-              Provisioner::Puppet.enqueue_hiera_params(Setting::PM_PHP, set_params(php.supported, {
+              DOA::Provisioner::Puppet.enqueue_hiera_params(DOA::Setting::PM_PHP, set_params(php.supported, {
                   'extensions' => { 'xdebug' => provided.nil? ? defaults : defaults.merge(provided) }
                 })) if !php.supported.empty?
             end
           end
         end
 
-        def self.set_install_dir(value = nil)
-          subdirectory = Tools.get_puppet_mod_prioritized_def_value([Setting::SW_WP, 'wp', 'subdirectory'], Setting::PM_WP)
-          value        = Tools.get_puppet_mod_prioritized_def_value([Setting::SW_WP, 'wp', 'install', 'dir'], Setting::PM_WP) if value.nil?
+        def self.get_install_dir(value = nil)
+          subdirectory = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_WP, 'wp', 'subdirectory'], DOA::Setting::PM_WP)
+          value        = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_WP, 'wp', 'install', 'dir'], DOA::Setting::PM_WP) if value.nil?
           install_dir  = value.empty? ? DEF_INSTALL_DIR : value
-          install_dir  = "#{ install_dir }/#{ ['true', 'on', 'yes', '1'].include?(subdirectory.to_s) ? Guest.provisioner.current_project : subdirectory }" if !subdirectory.nil?
-          return "'#{ install_dir }'"
+          install_dir  = "#{ install_dir }/#{ ['true', 'on', 'yes', '1'].include?(subdirectory.to_s) ? DOA::Guest.provisioner.current_project : subdirectory }" if !subdirectory.nil?
+          return install_dir
+        end
+
+        def self.setup_presync_excludes(value)
+          excludes = (value.is_a?(Array) and !value.empty?) ? value : DOA::Sync::DEFAULT_EXCLUDES
+          [DOA::Host.sync, DOA::Guest.sync].each do |sync|
+            get_path(sync)
+            add_excludes(sync, excludes)
+          end
+          nil
+        end
+
+        def self.setup_listen_ignores(value)
+          ignores  = (value.is_a?(Array) and !value.empty?) ? value : DOA::Sync::DEFAULT_IGNORES
+          [DOA::Host.sync, DOA::Guest.sync].each do |sync|
+            get_path(sync)
+            from_escaped = @path[:from].gsub('/', '\/')
+            sync.ignores.push(*(ignores.map { |pattern| "#{ from_escaped }\\/#{ pattern }" }))
+          end
+          nil
+        end
+
+        def self.add_excludes(sync, excludes = [])
+          if sync.presync[:dirs].has_key?(DOA::SSH.escape(sync.from.os, @path[:from], true))
+            sync.presync[:dirs][DOA::SSH.escape(sync.from.os, @path[:from], true)][:exclude].push(*excludes)
+          else
+            sync.presync[:dirs][DOA::SSH.escape(sync.from.os, @path[:from], true)] = {
+              :to       => DOA::SSH.escape(sync.to.os, @path[:to]),
+              :exclude  => excludes,
+            }
+          end
+          nil
+        end
+
+        def self.setup_assets(value, type = DOA::Setting::WP_ASSET_PLUGIN)
+          assets = {}
+          if value.is_a?(Hash) and !value.empty?
+            asset_defaults = {
+              'install'  => 'true',
+              'activate' => 'true',
+              'delete'   => nil,
+              'version'  => nil,
+            }
+            #get_path(DOA::Guest.sync)
+            value.each do |slug, config|
+              slug_key = "'#{ slug }'"
+              # Check allowed types/values
+              ctx = [DOA::Guest.sh_header, DOA::Guest.hostname, DOA::Guest.provisioner.current_project, @label.downcase]
+              ['install', 'activate', 'delete'].each do |param|
+                if config.has_key?(param) and !DOA::Tools::valid_boolean?(config[param])
+                  puts sprintf(DOA::L10n::UNSUPPORTED_PARAM_VALUE_CTX_SW, *(ctx + [param]).colorize(:red))
+                  raise SystemExit
+                end
+              end
+
+              # Prepare Hiera data
+              assets[slug_key] = {
+                'install'  => config.has_key?('install') ? config['install'].to_s : asset_defaults['install'],
+                'activate' => config.has_key?('activate') ? config['activate'].to_s : asset_defaults['activate'],
+                'delete'   => config.has_key?('delete') ? config['delete'].to_s : asset_defaults['delete'],
+                'version'  => "'#{ config.has_key?('version') ? config['version'] : asset_defaults['version'] }'",
+              }
+              assets[slug_key].delete_if { |key, value| value.nil? }
+            end
+
+            # Load WP-CLI puppet class and install it for managing assets
+            DOA::Provisioner::Puppet.enqueue_hiera_classes('wordpress::wpcli')
+
+            # Set assets up depending upon machine (host/guest)
+            [DOA::Host.sync, DOA::Guest.sync].each do |sync|
+              get_path(sync)
+              value.each do |asset, params|
+                asset_path    = "#{ @path[:from] }/wp-content/#{ type }s/#{ asset }"
+                asset_ignores = (params.has_key?('ignore') and params['ignore'].is_a?(Array) and !params['ignore'].empty?) ? params['ignore'] : []
+                sync.ignores.push(*(asset_ignores.map { |pattern| "#{ asset_path }\\/#{ pattern }" })) if !params['ignore'].empty?
+                asset_excludes = params.has_key?('exclude') ?
+                  (params['exclude'].is_a?(Array) ? params['exclude'] :
+                    ((params['exclude'].is_a?(String) and !params['exclude'].strip.empty?) ? [params['exclude'].strip] : [])) : []
+                add_excludes(sync, (asset_excludes - DOA::Sync::DEFAULT_EXCLUDES).map { |pattern| "#{ asset }/#{ pattern }" }) if !asset_excludes.empty?
+              end
+            end
+          end
+
+          Provisioner::Puppet.enqueue_hiera_params(@label, {'wordpress::instances' => {
+              "'#{ DOA::Guest.provisioner.current_project.nil? ? 'base' : DOA::Guest.provisioner.current_project }'" => {
+                "wp_#{ type }s" => assets
+            }}}) if !assets.empty?
+          nil
         end
       end
     end

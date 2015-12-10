@@ -1,6 +1,6 @@
 $env:GEM_PATH = "<%= DOA::Env.gems_path %>";
 $env:HOME = "<%= @from.user_home %>";
-$listen = start-process -FilePath "<%= DOA::Env.ruby %>" -ArgumentList "<%= @from.session.listener %>" -PassThru;
+$listen = start-process -FilePath "<%= DOA::Env.ruby %>" -ArgumentList "<%= @from.session.listener %>" -PassThru -WindowStyle Hidden; # -NoNewWindow;
 Start-Sleep -s 5;
 $listen = Get-Process -Id $listen.Id -ErrorAction SilentlyContinue;
 If ($listen.Id) {

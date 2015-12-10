@@ -1,38 +1,46 @@
 require 'listen'
+require 'colorize'
 
-cmd_ssh = "ssh -l <%= @ssh_user %> <%= DOA::SSH::OPT_RSYNC %> -i <%= @quotes %><%= @ssh_key %><%= @quotes %>"
-cmd_partial_rsync = "rsync -e \"#{ cmd_ssh }\" <%= Sync::OPT_RSYNC %> --log-file <%= @quotes %><%= @from.session.log_rsync %><%= @quotes %> <% @excludes.each do |exclude| %>--exclude <%= @quotes %><%= exclude %><%= @quotes %> <% end %>"
-
-<% if @from.instance_of? DOA::Guest %>
-# Ensure paths to listen to exist and have the right permissions and ownership
-<% @listen_to.each do |path| %>
-`sudo mkdir -p <%= path %>; sudo chown -R <%= @rsync_user %>:<%= @rsync_user %> <%= path %>; sudo find <%= path %> -type d -exec sudo chmod 755 {} \; sudo find <%= path %> -type f -exec sudo chmod 644 {} \;`
-<% end %>
-<% end %>
+cmd_ssh = "ssh -l <%= @ssh_user %> <%= SSH::OPT_RSYNC %> -i <%= @quotes %><%= @ssh_key %><%= @quotes %>"
+cmd_partial_rsync = "rsync -e \"#{ cmd_ssh }\" <%= Sync::OPT_RSYNC %> --log-file <%= @quotes %><%= @from.session.log_rsync %><%= @quotes %>"
+ssh_del = "ssh -l <%= @ssh_user %> -i <%= @quotes %><%= @ssh_key %><%= @quotes %> <%= @to.hostname %>"
 
 listener = Listen.to("<%= @listen_to.join('","') %>") do |modified, added, removed|
   (modified + added + removed).compact.each do |path|
-    puts "Modified: #{ modified }" if !modified.empty?
-    puts "Added: #{ added }" if !added.empty?
-    puts "Removed: #{ removed }" if !removed.empty?
-    <% first_path = @conditions.keys[0] %>
-    <% @conditions.each do |site_path, rsync_cmd| %>
-    <%= site_path == first_path ? 'if' : 'elsif' %> path.start_with?('<%= site_path %>')
-      <%= rsync_cmd %>
-    <% end %>
+    to, excludes = nil, ''
+    puts "Added: #{ added }".colorize(:green) if !added.empty?
+    puts "Modified: #{ modified }".colorize(:yellow) if !modified.empty?
+    puts "Removed: #{ removed }".colorize(:red) if !removed.empty?
+
+<% if !@conditions.empty? and @conditions.is_a?(Hash) -%>
+<% else_if = false -%>
+<% @conditions.each do |project_path, commands| -%>
+<% if !commands.empty? -%>
+    <%= else_if ? 'elsif' : 'if' %> path.start_with?('<%= project_path %>')
+      <%= commands.join("\n      ") %>
+<% else_if = true -%>
+<% end -%>
+<% end -%>
+    end
+
+    # Sync catched FSEvent related resource
+    if !to.nil?
+      if removed.include?(path)
+        # Use SSH instead rsync when removing files/directories
+        `#{ ssh_del } 'rm -rf #{ to }'`
+      else
+        # Force rsync to create remote path
+        # See http://www.schwertly.com/2013/07/forcing-rsync-to-create-a-remote-path-using-rsync-path/
+        `#{ cmd_partial_rsync } --rsync-path="mkdir -p #{ File.dirname(to) } && rsync" #{ from } <%= @rsync_user %>@<%= @to.hostname %>:#{ to }`
+      end
     end
   end
+<% end -%>
 end
-<% if @from.instance_of? DOA::Host %>
-# Sync before start listening
-<% @conditions.values.each do |rsync_cmd| %>
-<%= rsync_cmd %>
-<% end %>
-<% end %>
 
 # Start listening (...and ignoring!)
 listener.start
-<% @ignores.each_with_index do |ignore, idx| %>
+<% @ignores.each_with_index do |ignore, idx| -%>
 listener.ignore<%= idx == 0 ? '!' : '' %> /^<%= ignore %>/
-<% end %>
+<% end -%>
 sleep

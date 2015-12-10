@@ -1,5 +1,6 @@
 **/.project
 .vagrant
+projects
 Gemfile
 Gemfile.lock
 Guardfile

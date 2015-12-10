@@ -6,7 +6,7 @@
 <%
   begin_sep = "=" * 40
   end_sep = "=" * 20
-  
+
   if !@@sw_stack.nil? and !@@sw_stack.empty?
     @@sw_stack.each do |sw, params|
       if !params.empty?
@@ -14,7 +14,7 @@
 %>
 <%= '#' + begin_sep + "\n# " + sw + "\n#" + end_sep %>
 <%      params.each do |param, value|
-%><%= param %>:<%= Tools.format_yaml(value, 1) %>
+%><%= param %>:<%= DOA::Tools.format_yaml(value, 1) %>
 <%
         end # loop sw params
       end # if sw params

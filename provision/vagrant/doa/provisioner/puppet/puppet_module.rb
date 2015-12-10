@@ -6,7 +6,7 @@ class PuppetModule
   GLUE_METHOD     = '#'
   GLUE_PARAMS     = '@'
   GLUE_ITEMS      = ','
-  GLUE_KEYS       = DOA::Tools::GLUE_KEYS # '->'
+  GLUE_KEYS       = DOA::Tools::GLUE_KEYS
   VALIDATORS = [
     :array,
     :array_ips,
@@ -16,6 +16,7 @@ class PuppetModule
     :boolean,
     :chmod,
     :float,
+    :hash,
     :hash_flags,
     :hash_values,
     :integer,
@@ -115,15 +116,13 @@ class PuppetModule
         end
       end
 
-      valid, value = true, nil
+      valid, value, default, doa_def, mod_def = true, nil, nil, nil, nil
 
       # Recursive self call for parameter children
       if config.has_key?(:children)
-        if provided.has_key?(param)
-          children_provided = set_params(config[:children],
-            (provided[param].is_a?(Hash) and !provided[param].blank?) ? provided[param] : {})
-          stack_settings = stack_settings.deep_merge(children_provided) if children_provided.present?
-        end
+        children_provided = set_params(config[:children],
+          (provided[param].is_a?(Hash) and !provided[param].blank?) ? provided[param] : {})
+        stack_settings = stack_settings.deep_merge(children_provided) if children_provided.present?
       # Recursive self call for hash of children items
       elsif config.has_key?(:children_hash)
         if provided.has_key?(param)
@@ -208,8 +207,7 @@ class PuppetModule
         raise SystemExit
       end
 
-      ###if !value.nil? and config.has_key?(:maps_to) and !config[:maps_to].blank?
-      if !value.nil? #and config.has_key?(:maps_to) and !config[:maps_to].blank?
+      if !value.nil? and value != mod_def
         # Some types need a preprocess to be properly wrapped
         if config[:expect].is_a?(Array) and
             (config[:expect].include?(:hash_flags) or config[:expect].include?(:hash_values))
@@ -228,7 +226,6 @@ class PuppetModule
 
         # Assign value when catched
         maps_to = (config.has_key?(:maps_to) and !config[:maps_to].blank?) ? config[:maps_to] : param
-        ###stack_settings[config[:maps_to]] = case config.has_key?(:expect)
         stack_settings[maps_to] = case config.has_key?(:expect)
           when true then case (config[:expect] & VALIDATORS_TO_WRAP).size
             when 0 then value

@@ -39,9 +39,9 @@ module DOA
       MANIFESTS_DIR = "#{ DOA::Guest::PROVISION }/manifests"
 
       # 3rd party puppet modules
-      PF_ID_GLUE  = '/'
-      PF_RES_GLUE = '::'
-      PF_MOD_APT  = 'puppetlabs/apt'
+      PF_ID_GLUE   = '/'
+      PF_RES_GLUE  = '::'
+      PF_MOD_APT   = 'puppetlabs/apt'
       DOA_MOD_APT  = 'cgalvarez/apthelper'
 
       # Class variables
@@ -52,7 +52,7 @@ module DOA
       @@hiera_classes   = {}
       @@relationships   = {}
       @@site_content    = []
-      @@current_project    = nil
+      @@current_project = nil
       @@current_sw      = nil
       @@current_stack   = nil
       @@os_family       = nil
@@ -78,6 +78,12 @@ module DOA
       def self.current_stack
         @@current_stack
       end
+      def current_sw
+        @@current_sw
+      end
+      def self.current_sw
+        @@current_sw
+      end
       def self.os_family
         @@os_family
       end
@@ -93,14 +99,14 @@ module DOA
         # Initialize all class variables
         @@puppetfile_mods, @@sw_stack, @@hiera_classes, @@relationships = {}, {}, {}, {}
         @@current_project, @@current_sw, @@current_stack = nil, nil, nil
-        @@os_family, @@os_distro, @@os_distro_ver = Puppet.os_info(OS_FAMILY), Puppet.os_info(OS_DISTRO), Puppet.os_info(OS_DISTRO_VER)
+        @@os_family, @@os_distro, @@os_distro_ver = os_info(OS_FAMILY), os_info(OS_DISTRO), os_info(OS_DISTRO_VER)
         ruby_ver = SSH.ssh_capture(DOA::Env.guest_insecure_ppk, DOA::Guest.user,
           DOA::Host.os, DOA::Guest.ssh_address, DOA::Guest.os, ["ruby -e 'print RUBY_VERSION'"]).strip.downcase
         @@api = ruby_ver =~ /\A1\.8\.[0-9]+\z/ ? 'forge' : 'forgeapi'
 
         printf(DOA::L10n::SETTING_UP_PROVISIONER, DOA::Guest.sh_header, TYPE, DOA::Guest.hostname)
         @@projects = DOA::Tools.check_get(DOA::Guest.settings, DOA::Tools::TYPE_HASH,
-          [DOA::Guest.hostname, DOA::Guest.hostname], Setting::PROJECTS)
+          [DOA::Guest.hostname, DOA::Guest.hostname], DOA::Setting::PROJECTS)
 
         # Queue all provided stacks
         stacks = [
@@ -108,7 +114,7 @@ module DOA
             :vm    => DOA::Guest.hostname,
             :proj  => nil,
             :stack => DOA::Tools.check_get(DOA::Guest.settings, DOA::Tools::TYPE_HASH,
-              [DOA::Guest.hostname, DOA::Guest.hostname], Setting::VM_STACK, {}),
+              [DOA::Guest.hostname, DOA::Guest.hostname], DOA::Setting::VM_STACK, {}),
           }
         ]
         projects.each do |project, project_settings|
@@ -116,7 +122,7 @@ module DOA
               :vm    => DOA::Guest.hostname,
               :proj  => project,
               :stack => DOA::Tools.check_get(project_settings, DOA::Tools::TYPE_HASH,
-                [DOA::Guest.hostname, @@current_project, Setting::PROJECT_STACK], Setting::PROJECT_STACK, {}),
+                [DOA::Guest.hostname, @@current_project, DOA::Setting::PROJECT_STACK], DOA::Setting::PROJECT_STACK, {}),
             }
           )
         end
@@ -128,14 +134,14 @@ module DOA
             @@current_sw = sw
             sw_mod =
               case sw
-              when Setting::SW_COUCHDB then 'CouchDB'
-              when Setting::SW_MARIADB then 'MariaDB'
-              when Setting::SW_METEOR then 'Meteor'
-              when Setting::SW_NGINX then 'Nginx'
-              when Setting::SW_PHP then 'PHP'
-              when Setting::SW_WP then Setting::PM_WP
+              when DOA::Setting::SW_COUCHDB then 'CouchDB'
+              when DOA::Setting::SW_MARIADB then 'MariaDB'
+              when DOA::Setting::SW_METEOR then 'Meteor'
+              when DOA::Setting::SW_NGINX then 'Nginx'
+              when DOA::Setting::SW_PHP then 'PHP'
+              when DOA::Setting::SW_WP then DOA::Setting::PM_WP
               end
-            if Puppet.const_defined?(sw_mod) and (subclass = Puppet.const_get(sw_mod)).is_a?(Class) and
+            if DOA::Provisioner::Puppet.const_defined?(sw_mod) and (subclass = DOA::Provisioner::Puppet.const_get(sw_mod)).is_a?(Class) and
                 subclass < PuppetModule and subclass.respond_to?('setup')
               subclass.send('setup', sw_settings)
             else
@@ -207,6 +213,7 @@ module DOA
           # Move the file into its final location inside the guest machine
           ssh_cmds.insert(-1, "sudo mv -f #{ settings['guest_temp'] } #{ settings['guest_final'] }")
         end
+
         # Execute the remote commands
         DOA::Guest.ssh(ssh_cmds)
 
@@ -221,14 +228,15 @@ module DOA
         ])
         puts DOA::L10n::SUCCESS_OK
 
-        #printf(DOA::L10n::PROVISIONING_STACK, DOA::Guest.sh_header, DOA::Guest.hostname, TYPE)
+        printf(DOA::L10n::PROVISIONING_STACK, DOA::Guest.sh_header, DOA::Guest.hostname, TYPE)
         DOA::Guest.ssh([
           "cd #{ CONFDIR }",
-        #  #"sudo r10k puppetfile install",    # Download the 3rd party modules into the guest machine
-          "sudo librarian-puppet update",     # Download the 3rd party modules (and their deps) into the guest machine
-        #  #"papply",                           # Execute provisioning
+          #"sudo r10k puppetfile install",    # Download the 3rd party modules into the guest machine
+          'sudo librarian-puppet update',     # Download the 3rd party modules (and their deps) into the guest machine
+          'papply',                           # Execute provisioning
         ])
         #puts DOA::L10n::SUCCESS_OK
+        puts "[FIX]"
       end
 
       # Returns some info about the guest machine, retrieved through Puppet Facter.
@@ -245,7 +253,7 @@ module DOA
         if req_info.nil?
           req_info =
             case DOA::Guest.os
-            when DOA::OS::LINUX then SSH.ssh_capture(DOA::Env.guest_insecure_ppk, DOA::Guest.user,
+            when DOA::OS::LINUX then DOA::SSH.ssh_capture(DOA::Env.guest_insecure_ppk, DOA::Guest.user,
               DOA::Host.os, DOA::Guest.ssh_address, DOA::Guest.os, ["facter #{ fact }"]).strip.downcase
             else nil
             end
@@ -375,7 +383,6 @@ module DOA
             @@current_project, @@current_sw, 'settings', 'Puppet#enqueue_apt_repo').colorize(:red)
           raise SystemExit
         else
-          ###settings.each { |k, v| settings[k] = v.deep_merge(PPA_DEFAULTS) }
           enqueue_apt_hiera_settings('apt', 'sources', label, {"'#{ label }'" => settings.deep_merge(PPA_DEFAULTS)}, relationships, [PF_MOD_APT], [PF_MOD_APT])
         end
       end
@@ -402,7 +409,6 @@ module DOA
         elsif !settings.has_key?('ensure') || !settings['ensure'].is_a?(String) ||
             !settings.has_key?('packages') || !settings['packages'].is_a?(String) ||
             !settings.has_key?('version') || !settings['version'].is_a?(String)
-            #!settings.has_key?('priority') || !(settings['priority'].is_a?(Integer) || settings['priority'].is_a?(String))
           puts sprintf(DOA::L10n::MALFORMED_FN_PARAM_CTX_PROJECT, DOA::Guest.sh_header, DOA::Guest.hostname,
             @@current_project, @@current_sw, 'settings', 'Puppet#enqueue_apt_pin').colorize(:red)
           raise SystemExit

@@ -21,8 +21,8 @@ module DOA
     PROJECT_STACK     = 'stack'
 
     # Assets
-    WP_ASSET_PLUGIN   = 'plugins'
-    WP_ASSET_THEME    = 'themes'
+    WP_ASSET_PLUGIN   = 'plugin'
+    WP_ASSET_THEME    = 'theme'
     ASSET_PATH        = 'path'
     ASSET_GIT         = 'git'
     ASSET_WPCLI       = 'wpcli'

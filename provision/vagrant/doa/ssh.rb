@@ -25,10 +25,10 @@ module DOA
       return path
     end
 
-    def self.ssh(key, user, from_os, to_address, to_os, cmd)
+    def self.ssh(key, user, from_os, to_address, to_os, cmd, cmd_quotes = '"')
       quote = from_os == OS::WINDOWS ? "'" : ''
       cmd_separator = to_os == OS::WINDOWS ? ' & ' : ' ; '
-      `ssh -l #{ user } #{ SSH::OPT_SSH } -i #{ quote }#{ key }#{ quote } #{ to_address } "#{ cmd.join(cmd_separator) }"`
+      `ssh -l #{ user } #{ SSH::OPT_SSH } -i #{ quote }#{ key }#{ quote } #{ to_address } #{ cmd_quotes }#{ cmd.join(cmd_separator) }#{ cmd_quotes }`
       ret = $?.exitstatus
       if ret != 0
         puts DOA::L10n::FAIL_ERROR

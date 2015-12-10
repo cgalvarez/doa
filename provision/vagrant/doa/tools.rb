@@ -55,37 +55,37 @@ module DOA
       value, abort, msg, msg_type = nil, '', '', ''
       if var.nil? or (!key.nil? and key.is_a?(String) and !key.empty? and var.is_a?(Hash) and (!var.has_key?(key) or var[key].nil?))
         if default.nil?
-          msg_type = Tools::MSG_MISSING_VALUE
+          msg_type = MSG_MISSING_VALUE
         elsif
           value = default
         end
       else
         var_class = case type
-          when DOA::Tools::TYPE_INTEGER then Integer
-          when DOA::Tools::TYPE_STRING then String
-          when DOA::Tools::TYPE_ARRAY then Array
-          when DOA::Tools::TYPE_HASH then Hash
+          when TYPE_INTEGER then Integer
+          when TYPE_STRING then String
+          when TYPE_ARRAY then Array
+          when TYPE_HASH then Hash
           end
         case type
-        when DOA::Tools::TYPE_INTEGER, DOA::Tools::TYPE_STRING, DOA::Tools::TYPE_ARRAY, DOA::Tools::TYPE_HASH
+        when TYPE_INTEGER, TYPE_STRING, TYPE_ARRAY, TYPE_HASH
           if key.nil?
             # Without key and not its type
             if !var.is_a?(var_class)
-              if type == DOA::Tools::TYPE_INTEGER and var.is_a?(String)
+              if type == TYPE_INTEGER and var.is_a?(String)
                 if !/\A\d+\z/.match(var) or (!vmin.nil? and var.to_i < vmin) or (!vmax.nil? and var.to_i > vmax)
-                  msg_type = Tools::MSG_WRONG_VALUE
+                  msg_type = MSG_WRONG_VALUE
                 else
                   value = var.to_i
                 end
               else
-                msg_type = Tools::MSG_WRONG_TYPE ##
+                msg_type = MSG_WRONG_TYPE ##
               end
             # Without key and its type
             else
-              if type == DOA::Tools::TYPE_INTEGER
+              if type == TYPE_INTEGER
                 value = var if (vmin.nil? or var >= vmin) and (vmax.nil? or var <= vmax)
               elsif !empty and var.empty?
-                msg_type = Tools::MSG_MISSING_VALUE
+                msg_type = MSG_MISSING_VALUE
               else
                 value = var
               end
@@ -97,24 +97,24 @@ module DOA
               ctx[-1] = key
               # Key does not exist
               if !var.has_key?(key)
-                msg_type = Tools::MSG_MISSING_VALUE
+                msg_type = MSG_MISSING_VALUE
               # Child not of its type
               elsif !var[key].is_a?(var_class)
-                if type == DOA::Tools::TYPE_INTEGER and var[key].is_a?(String)
+                if type == TYPE_INTEGER and var[key].is_a?(String)
                   if !/\A\d+\z/.match(var) or (!vmin.nil? and var.to_i < vmin) or (!vmax.nil? and var.to_i > vmax)
-                    msg_type = Tools::MSG_WRONG_VALUE
+                    msg_type = MSG_WRONG_VALUE
                   else
                     value = var.to_i
                   end
                 else
-                  msg_type = Tools::MSG_WRONG_TYPE
+                  msg_type = MSG_WRONG_TYPE
                 end
               # Child of its type
               else
-                if type == DOA::Tools::TYPE_INTEGER
+                if type == TYPE_INTEGER
                   value = var[key] if (vmin.nil? or var[key] >= vmin) and (vmax.nil? or var[key] <= vmax)
                 elsif !empty and var[key].empty?
-                  msg_type = Tools::MSG_MISSING_VALUE
+                  msg_type = MSG_MISSING_VALUE
                 else
                   value = var[key]
                 end
@@ -122,19 +122,19 @@ module DOA
               end
             # Parent is not hash
             else
-              msg_type = Tools::MSG_WRONG_TYPE
+              msg_type = MSG_WRONG_TYPE
             end
           end
         else
           puts (sprintf "%s ERROR: The type '%s' has no checking support", *args).colorize(:red) #########
           raise SystemExit
         end
-        msg_type = Tools::MSG_WRONG_TYPE if value.nil? and msg_type.empty?
+        msg_type = MSG_WRONG_TYPE if value.nil? and msg_type.empty?
       end
 
       # Get message string and its input arguments when
       case msg_type
-      when Tools::MSG_MISSING_VALUE
+      when MSG_MISSING_VALUE
         msg = case ctx.size
           when 2 then DOA::L10n::MISSING_PARAM_TYPE_CTX_VM
           when 3 then DOA::L10n::MISSING_PARAM_TYPE_CTX_PROJECT
@@ -158,6 +158,11 @@ module DOA
       return value
     end
 
+    # Returns +true+ if +check+ is a non-empty hash.
+    def self.valid_hash?(check)
+      check.is_a?(Hash) and !check.empty?
+    end
+
     # Returns +true+ if +check+ is a non-empty hash of values (anything but array or hash).
     def self.valid_hash_values?(check)
       if !check.is_a?(Hash) or check.empty?
@@ -176,7 +181,8 @@ module DOA
         return false
       else
         check.each do |key, val|
-          return false if !((val.is_a?(String) and (val == 'on' or val == 'off')) or Tools::valid_boolean?(val))
+          ###return false if !((val.is_a?(String) and (val == 'on' or val == 'off')) or Tools::valid_boolean?(val))
+          return false if !((val.is_a?(String) and (val == 'on' or val == 'off')) or valid_boolean?(val))
         end
       end
       true
@@ -199,12 +205,12 @@ module DOA
 
     # Returns +true+ if +check+ is a valid boolean value.
     def self.valid_integer?(check)
-      (check.is_a?(Integer) or check =~ Tools::RGX_INTEGER)
+      (check.is_a?(Integer) or check =~ RGX_INTEGER)
     end
 
     # Returns +true+ if +check+ is a valid level value.
     def self.valid_level?(check)
-      (check.is_a?(String) and check =~ Tools::RGX_LEVEL)
+      (check.is_a?(String) and check =~ RGX_LEVEL)
     end
 
     # Returns +true+ if +check+ is a valid level value.
@@ -214,7 +220,7 @@ module DOA
 
     # Returns +true+ if +check+ is a valid boolean value.
     def self.valid_chmod?(check)
-      (!check.nil? and check.is_a?(String) and Tools::RGX_CHMOD =~ check)
+      (!check.nil? and check.is_a?(String) and RGX_CHMOD =~ check)
     end
 
     # Returns +true+ if +check+ is an array of valid IPv4 addresses.
@@ -224,7 +230,8 @@ module DOA
         valid = false
       else
         check.each do |item|
-          if !Tools::valid_ipv4?(item)
+          ###if !Tools::valid_ipv4?(item)
+          if !valid_ipv4?(item)
             valid = false
             break
           end
@@ -240,7 +247,8 @@ module DOA
         valid = false
       else
         check.each do |item|
-          if !Tools::valid_ipv6?(item)
+          ###if !Tools::valid_ipv6?(item)
+          if !valid_ipv6?(item)
             valid = false
             break
           end
@@ -256,7 +264,8 @@ module DOA
         valid = false
       else
         check.each do |item|
-          if !Tools::valid_ipv4?(item) and !Tools::valid_ipv6?(item)
+          ###if !Tools::valid_ipv4?(item) and !Tools::valid_ipv6?(item)
+          if !valid_ipv4?(item) and !valid_ipv6?(item)
             valid = false
             break
           end
@@ -267,13 +276,14 @@ module DOA
 
     # Returns +true+ if +check+ is a valid IP address (IPv4 or IPv6).
     def self.valid_ip?(check)
-      Tools::valid_ipv4?(check) or Tools::valid_ipv6?(check)
+      ###Tools::valid_ipv4?(check) or Tools::valid_ipv6?(check)
+      valid_ipv4?(check) or valid_ipv6?(check)
     end
 
     # Returns +true+ if +check+ is a valid IPv4 address.
     def self.valid_ipv4?(check)
       ###if /\A(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\Z/ =~ addr
-      if !check.nil? and Tools::RGX_IPV4 =~ check
+      if !check.nil? and RGX_IPV4 =~ check
         return $~.captures.all? {|i| i.to_i < 256}
       end
       return false
@@ -281,12 +291,12 @@ module DOA
 
     # Returns +true+ if +check+ is a valid IPv4 address.
     def self.valid_ipv4_port?(check)
-      return (!check.nil? and Tools::RGX_IPV4_PORT =~ check)
+      return (!check.nil? and RGX_IPV4_PORT =~ check)
     end
 
     # Returns +true+ if +check+ is a valid IPv4 address.
     def self.valid_ipv6?(check)
-      (!check.nil? and Tools::RGX_IPV6 =~ check)
+      (!check.nil? and RGX_IPV6 =~ check)
     end
 
     # Returns +true+ if +check+ is a valid Puppet interpolable URI
@@ -295,33 +305,33 @@ module DOA
     #   - file:///media/conf.%{hiera('input::hostname')}/shared-storage0/conf.$hostname/${fqdn}.motd/file
     #   - puppet:///media/conf.%{hiera('input::hostname')}/shared-storage0/conf.$hostname/${fqdn}.motd/file
     def self.valid_puppet_interpolable_uri?(check)
-      return (!check.nil? and !(Tools::RGX_PUPPET_INTERPOLABLE_URI_SOURCE =~ check).nil?)
+      return (!check.nil? and !(RGX_PUPPET_INTERPOLABLE_URI_SOURCE =~ check).nil?)
     end
 
     def self.valid_puppet_interpolable_string?(check)
-      return (!check.nil? and !(Tools::RGX_PUPPET_INTERPOLABLE_STRING =~ check).nil?)
+      return (!check.nil? and !(RGX_PUPPET_INTERPOLABLE_STRING =~ check).nil?)
     end
 
     # Returns +true+ if +check+ is a valid UNIX absolute path.
     def self.valid_unix_abspath?(check)
       require 'pathname'
-      return (!check.nil? and !(Tools::RGX_UNIX_ABSPATH =~ check).nil? and (Pathname.new(check)).absolute?)
+      return (!check.nil? and !(RGX_UNIX_ABSPATH =~ check).nil? and (Pathname.new(check)).absolute?)
     end
 
     # Returns +true+ if +check+ is a valid UNIX relative path.
     def self.valid_unix_relpath?(check)
       require 'pathname'
-      return (!check.nil? and !(Tools::RGX_UNIX_RELPATH =~ check).nil? and (Pathname.new(check)).relative?)
+      return (!check.nil? and !(RGX_UNIX_RELPATH =~ check).nil? and (Pathname.new(check)).relative?)
     end
 
     # Returns +true+ if +check+ is a valid UNIX (absolute or relative) path.
     def self.valid_unix_path?(check)
-      return (!check.nil? and !(Tools::RGX_UNIX_PATH =~ check).nil?)
+      return (!check.nil? and !(RGX_UNIX_PATH =~ check).nil?)
     end
 
     # Returns +true+ if +check+ is a valid Linux package name.
     def self.valid_linux_package_name?(check)
-      return (!check.nil? and !(Tools::RGX_LINUX_PKG_NAME =~ check).nil?)
+      return (!check.nil? and !(RGX_LINUX_PKG_NAME =~ check).nil?)
     end
 
     # Returns +true+ if +check+ is a valid Linux package name.
@@ -332,8 +342,8 @@ module DOA
     # Returns +true+ if +check+ is a valid port number.
     def self.valid_port?(check)
       if !check.nil? and
-          (check.is_a? Integer and check <= Tools::MAX_PORT and check >= Tools::MIN_PORT) or
-          (check.is_a? String and Tools::RGX_STRING_INT =~ check and check.to_i <= Tools::MAX_PORT and check.to_i >= Tools::MIN_PORT)
+          (check.is_a? Integer and check <= MAX_PORT and check >= MIN_PORT) or
+          (check.is_a? String and RGX_STRING_INT =~ check and check.to_i <= MAX_PORT and check.to_i >= MIN_PORT)
         return true
       end
       return false
@@ -354,8 +364,8 @@ module DOA
       #   - Reserved keyword: 'latest', 'present', 'absent'
       if (!allowed.empty? and allowed.include?(check)) or
             (!keywords.empty? and keywords.include?(check)) or
-            (branch and !(check =~ Tools::RGX_SEMVER_BRANCH).nil?) or
-            (semver and !(check =~ Tools::RGX_SEMVER_VERSION).nil?)
+            (branch and !(check =~ RGX_SEMVER_BRANCH).nil?) or
+            (semver and !(check =~ RGX_SEMVER_VERSION).nil?)
         # SEMVER: https://github.com/jlindsey/semantic
         return true
       end
@@ -373,15 +383,13 @@ module DOA
     # +item+:: value to format
     # +depth+:: number of indentations at the beginning of each line
     def self.format_yaml(item, depth)
-      indent = Tools::YAML_TAB * depth
+      indent = YAML_TAB * depth
       if item.is_a?(String) or item.is_a?(Integer)
         return " #{ item.to_s }"
       elsif item.is_a?(Array)
-        #return item.to_yaml.gsub("---", '').gsub("\n", "\n#{ indent }").rstrip
         return item.size > 0 ? "\n#{ indent }- #{ item.join("\n#{ indent }- ") }" : ''
       elsif item.is_a?(Hash)
         text = ''
-        #item = item.sort.to_h
         item.keys.sort.each { |k| item[k] = item.delete k }
         item.each do |key, val|
           text = "#{ text.to_s }\n#{ indent }#{ key }:#{ Tools.format_yaml(val, depth + 1) }"
@@ -410,11 +418,15 @@ module DOA
     end
 
     def self.get_puppet_mod_prioritized_def_value(path, puppetmod)
-      value = DOA::Tools.recursive_get(DOA::Guest.provisioner.current_stack, path)
-      value = DOA::Tools.recursive_get(DOA::Guest.settings['stack'], path) if value.empty?
+      ###value = DOA::Tools.recursive_get(DOA::Guest.provisioner.current_stack, path)
+      ###value = DOA::Tools.recursive_get(DOA::Guest.settings['stack'], path) if value.empty?
+      value = recursive_get(DOA::Guest.provisioner.current_stack, path)
+      value = recursive_get(DOA::Guest.settings['stack'], path) if value.empty?
       filtered_path = path - ['*']
-      value = DOA::Tools.get_puppet_mod_def_value(puppetmod, filtered_path, :doa_def) if value.empty?
-      value = DOA::Tools.get_puppet_mod_def_value(puppetmod, filtered_path, :mod_def) if value.empty?
+      ###value = DOA::Tools.get_puppet_mod_def_value(puppetmod, filtered_path, :doa_def) if value.empty?
+      ###value = DOA::Tools.get_puppet_mod_def_value(puppetmod, filtered_path, :mod_def) if value.empty?
+      value = get_puppet_mod_def_value(puppetmod, filtered_path, :doa_def) if value.empty?
+      value = get_puppet_mod_def_value(puppetmod, filtered_path, :mod_def) if value.empty?
       return value
     end
     def self.recursive_get(hash, keys)
@@ -425,7 +437,6 @@ module DOA
           if recursion.is_a?(Hash)
             subrecursion = nil
             recursion.each do |subkey, subvalue|
-              #subrecursion = recursive_get(subvalue, keys[index + 1, keys.size - index].join(GLUE_KEYS))
               subrecursion = recursive_get(subvalue, keys[index + 1, keys.size - index])
               break if !subrecursion.nil?
             end

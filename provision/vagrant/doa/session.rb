@@ -4,8 +4,9 @@ module DOA
   class Session
     # Host session attributes
     attr_reader :path, :pub, :auth_keys_reloaded, :machine_session,
-      :guest_listener, :guest_hosts_pp,
-      :guest_papply, :guest_puppet_conf, :guest_puppetfile, :guest_hiera_yaml, :guest_common_yaml, :guest_hostname_yaml, :guest_site_pp,
+      :projects_path, :guest_projects_path, :guest_listener, :guest_hosts_pp,
+      :guest_papply, :guest_puppet_conf, :guest_puppetfile, :guest_hiera_yaml,
+      :guest_common_yaml, :guest_hostname_yaml, :guest_site_pp,
     # Guest session attributes
       :hosts_pp,
       :tmp_papply, :tmp_puppet_conf, :tmp_puppetfile, :tmp_hiera_yaml, :tmp_common_yaml, :tmp_hostname_yaml, :tmp_site_pp,
@@ -20,6 +21,7 @@ module DOA
       if host
         # Host intermediate temporary files
         @path               = "#{ DOA::Env.tmp_path }/#{ DOA::Guest.name }"
+        @projects_path      = "#{ DOA::Env.cwd }/projects"
         @ppk                = "#{ @path }/#{ DOA::Guest.name }"
         @pub                = "#{ @ppk }.pub"
         @pid                = "#{ @path }/pid"
@@ -40,15 +42,16 @@ module DOA
         @guest_common_yaml    = "#{ @path }/common.yaml"
         @guest_hostname_yaml  = "#{ @path }/hostname.yaml"
         @guest_site_pp        = "#{ @path }/site.pp"
+        @guest_projects_path  = "#{ @projects_path }/#{ DOA::Guest.name }"
 
         # Check for required folders
         Dir.mkdir(@path) unless File.exists?(@path) and File.directory?(@path)
       else
         @ppk        = "#{ DOA::Guest::HOME }/.ssh/#{ DOA::Host.hostname }"
-        @log_rsync  = "#{ DOA::Guest::LOG }/rsync.log"
+        @log_rsync  = "#{ DOA::Guest::HOME }/rsync.log"
         @hosts_pp   = "#{ DOA::Guest::TMP }/hosts.pp"
         @listener   = "#{ DOA::Guest::TMP }/fsevents_guest.rb"
-        
+
         # PROVISIONER: Puppet
         @tmp_papply         = "#{ DOA::Guest::TMP }/papply"
         @tmp_puppet_conf    = "#{ DOA::Guest::TMP }/puppet.conf"

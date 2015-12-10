@@ -89,7 +89,7 @@ module DOA
       @@cores           = DOA::Host.get_cores(@@os) unless @@os.nil?
       @@total_mem       = DOA::Host.get_total_physical_memory(@@os) unless @@os.nil?
       @@free_mem        = DOA::Host.get_free_physical_memory(@@os) unless @@os.nil?
-      @@ip              = Host.first_public_ipv4.ip_address unless Host.first_public_ipv4.nil?
+      @@ip              = DOA::Host.first_public_ipv4.ip_address unless DOA::Host.first_public_ipv4.nil?
       @@hosts           = @@os == DOA::OS::WINDOWS ? 'C:/Windows/System32/Drivers/etc/hosts' : '/etc/hosts'
     end
 
@@ -152,9 +152,9 @@ module DOA
       Socket.ip_address_list.detect { |intf| intf.ipv4? and !intf.ipv4_loopback? and !intf.ipv4_multicast? and !intf.ipv4_private? }
     end
 
-    # Generates a new session key for the current guest and authorizes them
+    # Generates a new session key for the current guest and authorizes it
     def self.add_session_keys
-      if DOA::Guest.running?
+      #if DOA::Guest.running? and !File.exist?(@@session.ppk)
         # Generate a new RSA 2048 bits SSH key for current session
         print "#{ DOA::Guest.sh_header } Generating new session key... "
         commands = []
@@ -183,21 +183,31 @@ module DOA
         `cat #{ quotes }#{ @@session.pub }#{ quotes } >> #{ quotes }#{ @@authorized_keys }#{ quotes }`
         puts $?.exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
 
+        reload_authorized_keys
         # Remove flag file to ask for reloading authorized keys again
-        `rm -f #{ quotes }#{ @@session.auth_keys_reloaded }#{ quotes }`
-      end
+        #`rm -f #{ quotes }#{ @@session.auth_keys_reloaded }#{ quotes }`
+      #end
     end
 
     # Cleans the temporary folder
-    def self.clean
-      print "#{ DOA::Guest.sh_header } Cleaning temporary files for current session @ #{ @@hostname }... "
-      FileUtils.rm_rf(@@session.path)
+    def self.clean(all = false)
+      if all
+        print "#{ DOA::Guest.sh_header } Cleaning temporary files @ #{ @@hostname }... "
+        FileUtils.rm_rf(@@session.path)
+      else
+        print "#{ DOA::Guest.sh_header } Cleaning temporary files for current session @ #{ @@hostname }... "
+        exclude = ['.', '..', File.basename(@@session.ppk)]
+        Dir.foreach(@@session.path) do |item|
+          next if exclude.include?(item)
+          FileUtils.rm("#{ @@session.path }/#{ item }")
+        end
+      end
       puts DOA::L10n::SUCCESS_OK
     end
 
     # Removes the last authorized key for the current guest machine if it exists.
     def self.remove_session_keys
-      print "#{ DOA::Guest.sh_header } Removing session key from host authorized keys... "
+      print "#{ DOA::Guest.sh_header } Removing session key from current user's SSH authorized keys @ host... "
       auth_keys_content = File.exist?(@@authorized_keys) ? `sed '/#{ DOA::Guest.hostname }/d' #{ @@authorized_keys }` : ''
       File.open(@@authorized_keys, 'w') { |file| file.write(auth_keys_content) }
       puts DOA::L10n::SUCCESS_OK
@@ -328,13 +338,13 @@ module DOA
       if !@@os.nil?
         return @@os
       elsif self.windows?
-        return OS::WINDOWS
+        return DOA::OS::WINDOWS
       elsif self.mac?
-        return OS::MAC
+        return DOA::OS::MAC
       elsif self.linux?
-        return OS::LINUX
+        return DOA::OS::LINUX
       elsif self.unix?
-        return OS::UNIX
+        return DOA::OS::UNIX
       else
         return nil
       end
@@ -345,12 +355,12 @@ module DOA
       total_phys_mem =
         case os
         # meminfo shows KB and we need to convert to MB
-        when OS::LINUX, OS::UNIX then `grep 'MemTotal' /proc/meminfo | sed -e 's/MemTotal://' -e 's/ kB//'`.to_i / 1024
+        when DOA::OS::LINUX, DOA::OS::UNIX then `grep 'MemTotal' /proc/meminfo | sed -e 's/MemTotal://' -e 's/ kB//'`.to_i / 1024
         # wmic shows KB and we need to convert to MB
         #when OS::WINDOWS then `wmic OS get TotalVisibleMemorySize /Value`.gsub("\n", '').partition('=').last.to_i / 1024
-        when OS::WINDOWS then `wmic OS get TotalVisibleMemorySize /Value`.strip.partition('=').last.to_i / 1024
+        when DOA::OS::WINDOWS then `wmic OS get TotalVisibleMemorySize /Value`.strip.partition('=').last.to_i / 1024
         # sysctl returns Bytes and we need to convert to MB
-        when OS::MAC then `sysctl -n hw.memsize`.to_i / 1024 / 1024
+        when DOA::OS::MAC then `sysctl -n hw.memsize`.to_i / 1024 / 1024
         else nil
         end
       return total_phys_mem
@@ -361,12 +371,12 @@ module DOA
       free_phys_mem =
         case os
         # meminfo shows KB and we need to convert to MB
-        when OS::LINUX, OS::UNIX then `grep 'MemFree' /proc/meminfo | sed -e 's/MemFree://' -e 's/ kB//'`.to_i / 1024
+        when DOA::OS::LINUX, DOA::OS::UNIX then `grep 'MemFree' /proc/meminfo | sed -e 's/MemFree://' -e 's/ kB//'`.to_i / 1024
         # wmic shows KB and we need to convert to MB
         #when OS::WINDOWS then `wmic OS get FreePhysicalMemory /Value`.gsub("\n", '').partition('=').last.to_i / 1024
-        when OS::WINDOWS then `wmic OS get FreePhysicalMemory /Value`.strip.partition('=').last.to_i / 1024
+        when DOA::OS::WINDOWS then `wmic OS get FreePhysicalMemory /Value`.strip.partition('=').last.to_i / 1024
         # sysctl returns Bytes and we need to convert to MB
-        when OS::MAC then `sysctl -n hw.usermem`.to_i / 1024 / 1024
+        when DOA::OS::MAC then `sysctl -n hw.usermem`.to_i / 1024 / 1024
         else nil
         end
       return free_phys_mem
@@ -376,10 +386,10 @@ module DOA
     def self.get_cores(os)
       cores =
         case os
-        when OS::LINUX, OS::UNIX then `nproc`.to_i
+        when DOA::OS::LINUX, DOA::OS::UNIX then `nproc`.to_i
         #when OS::WINDOWS then `wmic cpu get NumberOfCores /Value`.gsub("\n", '').partition('=').last.to_i
-        when OS::WINDOWS then `wmic cpu get NumberOfCores /Value`.strip.partition('=').last.to_i
-        when OS::MAC then `sysctl -n hw.ncpu`.to_i
+        when DOA::OS::WINDOWS then `wmic cpu get NumberOfCores /Value`.strip.partition('=').last.to_i
+        when DOA::OS::MAC then `sysctl -n hw.ncpu`.to_i
         else nil
         end
       return cores
@@ -389,7 +399,7 @@ module DOA
     # Params:
     # +max_retries+:: integer stating the maximum number of retries to provide the account password
     def self.reload_authorized_keys(max_retries = 3)
-      if @@os == OS::WINDOWS and !File.exist?(@@session.auth_keys_reloaded)
+      if @@os == DOA::OS::WINDOWS #and !File.exist?(@@session.ppk) #and !File.exist?(@@session.auth_keys_reloaded)
         auth_keys_content = File.exist?(@@authorized_keys) ?
           `sed -n '/#{ DOA::Guest.hostname }/p' #{ @@authorized_keys }` : ''
         puts sprintf(DOA::L10n::PW_REQUEST, DOA::Guest.sh_header)
@@ -405,9 +415,6 @@ module DOA
 
         puts sprintf(DOA::L10n::MAX_RETRIES_REACHED, DOA::Guest.sh_header) if n_tries == max_retries
         puts sprintf(DOA::L10n::RELOADING_AUTH_KEYS, DOA::Guest.sh_header, success ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR)
-        ###puts "#{ DOA::Guest.sh_header } Aborting... Maximum number of retries reached...".colorize(:red) if n_tries == max_retries
-        ###puts "#{ DOA::Guest.sh_header } Reloading authorized keys... [" + (success ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR) + ']'
-        `touch #{ @@session.auth_keys_reloaded }` if success
       end
     end
   end

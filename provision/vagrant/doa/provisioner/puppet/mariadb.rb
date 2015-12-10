@@ -254,9 +254,9 @@ module DOA
 
           # Configure swap file when low available memory
           if DOA::Guest.mem < 1024
-            Puppet.enqueue_puppetfile_mods(['petems/swap_file'])
-            Puppet.enqueue_relationship("Swap_file::Files['mariadb_swapfile']", {'before' => "Class['#{ PF_MOD_MAIN_CLASS }']"})
-            Puppet.enqueue_site_content("
+            DOA::Provisioner::Puppet.enqueue_puppetfile_mods(['petems/swap_file'])
+            DOA::Provisioner::Puppet.enqueue_relationship("Swap_file::Files['mariadb_swapfile']", {'before' => "Class['#{ PF_MOD_MAIN_CLASS }']"})
+            DOA::Provisioner::Puppet.enqueue_site_content("
 # Swap file (required to install & run MariaDB on machines with less than 1GB memory)
 swap_file::files { 'mariadb_swapfile':
   ensure        => 'present',
@@ -267,83 +267,85 @@ swap_file::files { 'mariadb_swapfile':
         end
 
         def self.process_param(value, param, parent = NODE_TYPE_SERVER)
-          if NODE_CHILDREN.has_key?(parent)
-            # Set the version for all children parameters
-            NODE_CHILDREN[parent].each do |child|
-              @provided[parent][child] = {} if !@provided[parent].has_key?(child)
-              @provided[parent][child][param] = value
+          if @provided.is_a?(Hash) and @provided.has_key?(parent)
+            if NODE_CHILDREN.has_key?(parent)
+              # Set the version for all children parameters
+              NODE_CHILDREN[parent].each do |child|
+                @provided[parent][child] = {} if !@provided[parent].has_key?(child)
+                @provided[parent][child][param] = value
+              end
             end
-          end
 
-          # Get branch and version, and check ensure
-          if param == 'version'
-            # Branch family (.x)
-            if Tools::valid_version?(value, [], [], false, true)
-              @branch = value.gsub(/\.[xX]/, '')
-              @branch = case @branch
-                when '5.5', '10.0', '10.1' then @branch
-                when '10' then '10.0'
-                when '5' then '5.5'
+            # Get branch and version, and check ensure
+            if param == 'version'
+              # Branch family (.x)
+              if DOA::Tools::valid_version?(value, [], [], false, true)
+                @branch = value.gsub(/\.[xX]/, '')
+                @branch = case @branch
+                  when '5.5', '10.0', '10.1' then @branch
+                  when '10' then '10.0'
+                  when '5' then '5.5'
+                  else nil
+                  end
+                if @branch.nil?
+                  tag = case parent
+                    when NODE_TYPE_SERVER then 'MariaDB Server'
+                    when NODE_TYPE_CLUSTER then 'MariaDB Galera Cluster'
+                    end
+                  puts sprintf(DOA::L10n::MARIADB_NO_SUPPORT, DOA::Guest.sh_header, DOA::Guest.hostname,
+                    DOA::Guest.provisioner.current_project, @label.downcase, tag, value).colorize(:red)
+                  raise SystemExit
+                end
+              # Specific version
+              elsif DOA::Tools::valid_version?(value, [], [], true, false)
+                @branch  = value.match(DOA::Tools::RGX_SEMVER_MINOR).captures[0]
+                @version = value.match(DOA::Tools::RGX_SEMVER).captures[0]
+
+                # ensure cannot be 'latest' when specific version provided
+                parent_cfg, keys = @provided, parent.split(GLUE_KEYS)
+                keys.each do |key|
+                  parent_cfg = parent_cfg[key]
+                end
+                if !parent_cfg.has_key?('ensure')
+                  @provided.recursive_set!(keys.push('ensure'), 'present')
+                elsif parent_cfg['ensure'] == 'latest'
+                  puts sprintf(DOA::L10n::VERSION_INCOMP, DOA::Guest.sh_header, DOA::Guest.hostname,
+                    DOA::Guest.provisioner.current_project, @label.downcase, 'ensure', 'latest').colorize(:red)
+                  raise SystemExit
+                end
+              # Allowed branch
+              elsif !value.nil? and ALLOWED_BRANCHES.has_key?(parent) and ALLOWED_BRANCHES[parent].include?(value)
+                @branch = value
+              end
+              @branch = '10.0' if @branch.nil?  # Default branch
+
+              # All involved items must belong to the same branch
+              if @req_branches.empty?
+                @req_branches.insert(-1, @branch)
+              elsif !@req_branches.include?(@branch)
+                puts sprintf(DOA::L10n::BRANCH_INCOMP, DOA::Guest.sh_header, DOA::Guest.hostname,
+                  DOA::Guest.provisioner.current_project, @label.downcase).colorize(:red)
+                raise SystemExit
+              end
+
+              # Set the repository branch according to the requested version/branch
+              main_class = case parent
+                when /^server(->)?/ then NODE_TYPE_SERVER
+                when /^cluster(->)?/ then NODE_TYPE_CLUSTER
                 else nil
                 end
-              if @branch.nil?
-                tag = case parent
-                  when NODE_TYPE_SERVER then 'MariaDB Server'
-                  when NODE_TYPE_CLUSTER then 'MariaDB Galera Cluster'
-                  end
-                puts sprintf(DOA::L10n::MARIADB_NO_SUPPORT, DOA::Guest.sh_header, DOA::Guest.hostname,
-                  DOA::Guest.provisioner.current_project, @label.downcase, tag, value).colorize(:red)
-                raise SystemExit
+              if !main_class.nil?
+                DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {"mariadb::#{ main_class }::repo_version" => "'#{ @branch }'"})
               end
-            # Specific version
-            elsif Tools::valid_version?(value, [], [], true, false)
-              @branch  = value.match(Tools::RGX_SEMVER_MINOR).captures[0]
-              @version = value.match(Tools::RGX_SEMVER).captures[0]
-
-              # ensure cannot be 'latest' when specific version provided
-              parent_cfg, keys = @provided, parent.split(GLUE_KEYS)
-              keys.each do |key|
-                parent_cfg = parent_cfg[key]
-              end
-              if !parent_cfg.has_key?('ensure')
-                @provided.recursive_set!(keys.push('ensure'), 'present')
-              elsif parent_cfg['ensure'] == 'latest'
-                puts sprintf(DOA::L10n::VERSION_INCOMP, DOA::Guest.sh_header, DOA::Guest.hostname,
-                  DOA::Guest.provisioner.current_project, @label.downcase, 'ensure', 'latest').colorize(:red)
-                raise SystemExit
-              end
-            # Allowed branch
-            elsif !value.nil? and ALLOWED_BRANCHES.has_key?(parent) and ALLOWED_BRANCHES[parent].include?(value)
-              @branch = value
-            end
-            @branch = '10.0' if @branch.nil?  # Default branch
-
-            # All involved items must belong to the same branch
-            if @req_branches.empty?
-              @req_branches.insert(-1, @branch)
-            elsif !@req_branches.include?(@branch)
-              puts sprintf(DOA::L10n::BRANCH_INCOMP, DOA::Guest.sh_header, DOA::Guest.hostname,
-                DOA::Guest.provisioner.current_project, @label.downcase).colorize(:red)
-              raise SystemExit
             end
 
-            # Set the repository branch according to the requested version/branch
-            main_class = case parent
-              when /^server(->)?/ then NODE_TYPE_SERVER
-              when /^cluster(->)?/ then NODE_TYPE_CLUSTER
-              else nil
-              end
-            if !main_class.nil?
-              DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {"mariadb::#{ main_class }::repo_version" => "'#{ @branch }'"})
+            if NODE_CHILDREN.has_key?(parent)
+              # Remove the group parameter to avoid compatibility failure between parameters
+              @provided[parent].except!(param)
+              return nil
+            else
+              return value
             end
-          end
-
-          if NODE_CHILDREN.has_key?(parent)
-            # Remove the group parameter to avoid compatibility failure between parameters
-            @provided[parent].except!(param)
-            return nil
-          else
-            return value
           end
         end
 

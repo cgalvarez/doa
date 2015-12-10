@@ -48,30 +48,30 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         else
           # Update puppet/r10k/librarian-puppet to their latest versions
           machine.vm.provision 'shell', path: 'provision/shell/puppet.sh'
-          machine.vm.synced_folder "provision/puppet/modules/", DOA::Provisioner::Puppet::MODS_PATH_CUSTOM
+          machine.vm.synced_folder 'provision/puppet/modules/', DOA::Provisioner::Puppet::MODS_PATH_CUSTOM
         end
       end
 
-      # ALWAYS reload host info with Vagrant internal info and the current guest
       machine.trigger.before [:up, :halt, :suspend, :resume, :reload, :ssh, :destroy] do
+        # ALWAYS reload host info with Vagrant internal info and the current guest
         DOA::Env.reload_session(@machine)
         DOA::Host.reload_session
         DOA::Guest.reload_session
       end
-
       machine.trigger.before [:reload, :suspend, :halt] do
-        DOA::Host.remove_session_keys
-        DOA::Guest.remove_session_keys
+        # Remove any entry related to host/guest from hosts file
         DOA::Guest.manage_hosts(true)
         DOA::Host.manage_hosts(true)
       end
-
       machine.trigger.after [:reload, :resume, :up] do
+        # Insert/update host/guest entries in hosts files (user can provide a
+        # static IP on reload or vagrant can change the dynamic ip in other case)
         DOA::Host.manage_hosts
-        DOA::Host.add_session_keys
-        #DOA::Host.reload_authorized_keys
         DOA::Guest.manage_hosts
-        DOA::Guest.add_session_keys
+        if DOA::Guest.running? and !File.exist?(DOA::Host.session.ppk)
+          DOA::Host.add_session_keys
+          DOA::Guest.add_session_keys
+        end
 
         # Setup the provision for the desired guest machine stack by the user
         if DOA::Guest.provision or !machine_exists
@@ -84,23 +84,24 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           end
         end
 
-        # Start bg-rsyncing @ guest before => Creates folders structure if
-        # missing with appropriate ownership and permissions
+        DOA::Guest.sync.stop
+        DOA::Host.sync.stop
         DOA::Guest.sync.start
-        # TODO: This should start when exiting Vagrant (after all the guests are up)
-        # That's not possible, so we check it on every processed machine (we could
-        # check for the last machine and then do it, but in a multi-machine Vagrant
-        # environment each machine can be managed independently of the others).
         DOA::Host.sync.start
       end
-
-      machine.trigger.after [:suspend, :halt, :destroy] do
+      machine.trigger.before [:reload] do
+        DOA::Host.sync.stop
+        DOA::Guest.sync.stop
+        DOA::Host.clean
+      end
+      machine.trigger.after [:suspend, :halt] do
         DOA::Host.sync.stop
         DOA::Host.clean
       end
-
-      machine.trigger.before [:ssh] do
-        #DOA::Host.reload_authorized_keys
+      machine.trigger.after [:destroy] do
+        DOA::Host.sync.stop
+        DOA::Host.remove_session_keys   # Remove host->guest ssh keys from current user's authorized keys @ host
+        DOA::Host.clean(true)           # Remove ALL guest machine mid-files
       end
 
       # Guest virtual machine setup
