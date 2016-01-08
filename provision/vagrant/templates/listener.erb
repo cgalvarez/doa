@@ -4,8 +4,15 @@ require 'colorize'
 cmd_ssh = "ssh -l <%= @ssh_user %> <%= SSH::OPT_RSYNC %> -i <%= @quotes %><%= @ssh_key %><%= @quotes %>"
 cmd_partial_rsync = "rsync -e \"#{ cmd_ssh }\" <%= Sync::OPT_RSYNC %> --log-file <%= @quotes %><%= @from.session.log_rsync %><%= @quotes %>"
 ssh_del = "ssh -l <%= @ssh_user %> -i <%= @quotes %><%= @ssh_key %><%= @quotes %> <%= @to.hostname %>"
+cmd_glue = <%= @to.os == DOA::OS::WINDOWS ? "'&'" : "'&&'" %>
+cmd_mkdir = 'mkdir<%= @to.os == DOA::OS::WINDOWS ? '' : ' -p' %>'
 
-listener = Listen.to("<%= @listen_to.join('","') %>") do |modified, added, removed|
+<% if @from.instance.instance_of? DOA::Guest -%>
+# Increase the amount of inotify watchers
+# See: https://github.com/guard/listen/wiki/Increasing-the-amount-of-inotify-watchers
+`echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p`
+<% end -%>
+listener = Listen.to("<%= @listen_to.join('","') %>", ignore: [<%= @ignores.uniq.join(',') %>]) do |modified, added, removed|
   (modified + added + removed).compact.each do |path|
     to, excludes = nil, ''
     puts "Added: #{ added }".colorize(:green) if !added.empty?
@@ -31,7 +38,7 @@ listener = Listen.to("<%= @listen_to.join('","') %>") do |modified, added, remov
       else
         # Force rsync to create remote path
         # See http://www.schwertly.com/2013/07/forcing-rsync-to-create-a-remote-path-using-rsync-path/
-        `#{ cmd_partial_rsync } --rsync-path="mkdir -p #{ File.dirname(to) } && rsync" #{ from } <%= @rsync_user %>@<%= @to.hostname %>:#{ to }`
+        `#{ cmd_partial_rsync } --rsync-path='#{ cmd_mkdir } #{ dir } #{ cmd_glue } rsync' #{ from } <%= @rsync_user %>@<%= @to.hostname %>:#{ to }`
       end
     end
   end
@@ -40,7 +47,4 @@ end
 
 # Start listening (...and ignoring!)
 listener.start
-<% @ignores.each_with_index do |ignore, idx| -%>
-listener.ignore<%= idx == 0 ? '!' : '' %> /^<%= ignore %>/
-<% end -%>
 sleep

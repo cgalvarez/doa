@@ -66,6 +66,7 @@ module DOA
       @@gems_path = "#{ ENV['VAGRANT_INSTALLER_EMBEDDED_DIR'] }\\gems;#{ @@home_path }/gems".gsub('\\', '/')  # ENV['GEM_PATH']
       @@local_data_path         = "#{ @@cwd }/.vagrant"
       @@vagrant_provision_path  = "#{ @@cwd }/provision/vagrant"
+      @@default_insecure_ppk    = "#{ @@home_path }/insecure_private_key"
       Env.install_requirements
     end
 
@@ -94,8 +95,9 @@ module DOA
     # Rubygems instance.
     def self.install_requirements
       Env.check_vagrant_home
-      plugins = %w( vagrant-triggers )
-      gems = %w( colorize hosts )
+      plugins = ['vagrant-triggers', 'vagrant-vbox-snapshot']
+      plugins.insert(-1, 'vagrant-multi-putty') if Vagrant::Util::Platform.windows?
+      gems = ['colorize', 'hosts']
       required = plugins | gems
       need_restart = false
       required.each do |plugin|

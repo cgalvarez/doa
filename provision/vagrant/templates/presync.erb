@@ -1,0 +1,4 @@
+# Presync folders...
+<% DOA::Guest.sync.presync[:dirs].each do |dir, settings| -%>
+`<%= DOA::Guest.sync.presync[:cmd] %> <%= settings[:exclude].empty? ? '' : "--exclude '#{ settings[:exclude].join("' --exclude '") }'" %> <%= settings[:to] %>/ <%= DOA::Host.user_name %>@<%= DOA::Host.hostname %>:<%= dir %>`
+<% end -%>

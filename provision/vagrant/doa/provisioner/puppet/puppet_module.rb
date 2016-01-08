@@ -76,72 +76,40 @@ class PuppetModule
     @supported
   end
 
-  def self.check_unsupported_first_level_params(supported, provided)
-    provided.each do |param, config|
-      if !supported.has_key?(param)
-        puts sprintf(DOA::L10n::UNRECOGNIZED_SW_PARAM, DOA::Guest.sh_header, DOA::Guest.hostname,
-          DOA::Guest.provisioner.current_project.nil? ? 'machine stack' : DOA::Guest.provisioner.current_project,
-          @label.downcase, param).colorize(:red)
-        raise SystemExit
-      end
-    end
-  end
+  def self.set_params(path = [], supported = @supported)
+    queue = {}
+    supported.recursive_get(path, DOA::L10n::UNRECOGNIZED_PARAM).each do |param, config|
+      valid, value, default, doa_def, mod_def = true, nil, nil, nil, nil
+      provided = @provided.recursive_get(path + [param], nil, true)
+      config[:expect] = [config[:expect]] if config.has_key?(:expect) and !config[:expect].is_a?(Array)
 
-  def self.set_params(supported, provided = {})
-    stack_settings = {}
-
-    # Check for disallowed parameters
-    check_unsupported_first_level_params(supported, provided)
-
-    supported.each do |param, config|
       # Check for mutually exclusive parameters
-      if config.has_key?(:exclude) and provided.has_key?(param)
+      if config.has_key?(:exclude) and !provided.nil?
         config[:exclude] = [config[:exclude]] if !config[:exclude].is_a?(Array)
         config[:exclude].each do |exclusive|
-          keys = exclusive.split(GLUE_KEYS)
-          found, recursion, last = false, @provided, keys.last
-          keys.each do |key|
-            if recursion.has_key?(key)
-              recursion = recursion[key]
-              found = true if key == last
-            else
-              break
-            end
-          end
-          if found
-            puts sprintf(DOA::L10n::EXCLUSIVE_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-              DOA::Guest.provisioner.current_project, @label.downcase, param, exclusive).colorize(:red)
-            raise SystemExit
+          if !@provided.recursive_get(exclusive.split(GLUE_KEYS), nil, true).nil?
+            DOA::L10n::print(DOA::L10n::EXCLUSIVE_PARAMS, DOA::L10n::MSG_TYPE_ERROR,
+              [DOA::Guest.provisioner.current_project, @label.downcase], [param, exclusive], true)
           end
         end
       end
 
-      valid, value, default, doa_def, mod_def = true, nil, nil, nil, nil
-
       # Recursive self call for parameter children
       if config.has_key?(:children)
-        children_provided = set_params(config[:children],
-          (provided[param].is_a?(Hash) and !provided[param].blank?) ? provided[param] : {})
-        stack_settings = stack_settings.deep_merge(children_provided) if children_provided.present?
+        children_to_queue = set_params(path + [param, :children], supported)
+        queue = queue.deep_merge(children_to_queue) if children_to_queue.present?
       # Recursive self call for hash of children items
       elsif config.has_key?(:children_hash)
-        if provided.has_key?(param)
-          if provided[param].is_a?(Hash) and !provided[param].blank?
-            children_hash = {}
-            provided[param].each do |child_key, child_config|
-              children_hash["'#{child_key}'"] = set_params(config[:children_hash], child_config)
-            end
-            value = children_hash
-          else
-            puts "debe ser hash y no vacio"
+        if !provided.nil?
+          DOA::L10n::print(DOA::L10n::UNSUPPORTED_PARAM_VALUE, DOA::L10n::MSG_TYPE_ERROR,
+            [DOA::Guest.provisioner.current_project, @label.downcase], [param], true) if !provided.is_a?(Hash) or provided.blank?
+          value = {}
+          provided.each do |child, child_config|
+            value["'#{ child }'"] = set_params(path + [param, :children_hash, child], supported)
           end
         end
       # Process provided parameter
       else
-        if config.has_key?(:expect) and !config[:expect].nil?
-          config[:expect] = [config[:expect]] if !config[:expect].is_a?(Array)
-        end
-
         # Get the default value to apply
         doa_def = get_default_value(config, :doa_def)
         mod_def = get_default_value(config, :mod_def)
@@ -150,21 +118,20 @@ class PuppetModule
           else (doa_def != mod_def) ? doa_def : nil
           end
 
-        (doa_def != mod_def or doa_def.nil?)
         # Set default value when non provided and DOA default differs from puppet module default
-        if !provided.has_key?(param) or provided[param].blank?
+        if provided.nil?
           value = default if !default.nil? and default != mod_def
-        # Set provided value provided in input YAML for current machine if different from defaults
-        elsif provided[param].to_s != mod_def #default
-          # Check if value is included in the allowed subset whenever present
+        # Set provided value if differs from puppet module default
+        elsif provided.to_s != mod_def
+          # Check if provided value is included in the allowed subset whenever present
           if config.has_key?(:allow)
-            if provided[param].is_a?(Array) and !(provided[param] - config[:allow]).empty? or !config[:allow].include?(provided[param].to_s)
-              puts sprintf(DOA::L10n::UNSUPPORTED_VALUE_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-                DOA::Guest.provisioner.current_project, @label.downcase, provided[param], param).colorize(:red)
-              raise SystemExit
+            if provided.is_a?(Array) and !(provided - config[:allow]).empty? or !config[:allow].include?(provided.to_s)
+              DOA::L10n::print(DOA::L10n::UNSUPPORTED_VALUE, DOA::L10n::MSG_TYPE_ERROR,
+                [DOA::Guest.provisioner.current_project, @label.downcase], [provided, param], true)
             end
           end
-          # Validation against callback or :expect type
+
+          # Create an array with all validation callbacks (from either :cb_validate or :expect)
           cb_validate = []
           if config.has_key?(:cb_validate)
             cb_validate.insert(-1, config[:cb_validate])
@@ -173,38 +140,38 @@ class PuppetModule
               if VALIDATORS.include?(expected)
                 cb_validate.insert(-1, "DOA::Tools#valid_#{ expected.to_s }?");
               else
-                puts sprintf(DOA::L10n::UNSUPPORTED_VALUE_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-                  DOA::Guest.provisioner.current_project, @label.downcase, expected.to_s, :expect.to_s).colorize(:red)
-                raise SystemExit
+                DOA::L10n::print(DOA::L10n::UNSUPPORTED_VALUE, DOA::L10n::MSG_TYPE_ERROR,
+                  [DOA::Guest.provisioner.current_project, @label.downcase], [expected.to_s, :expect.to_s], true)
               end
             end
           end
 
-          valid_cb = false
-          cb_validate.each do |cb|
-            parts = cb.split(GLUE_PARAMS)
-            params = (parts.size == 2 ? parts[1].split(GLUE_ITEMS) : []).insert(0, provided[param])
-            cb_tokens = parts[0].split(GLUE_METHOD)
-            valid_cb ||= cb_tokens[0].split(GLUE_NAMESPACE).reduce(Module, :const_get).send(cb_tokens[1].to_s, *params)
-            break if valid_cb
+          # Perform validation (exit on the first successful validation)
+          if !cb_validate.empty?
+            valid = false
+            cb_validate.each do |cb|
+              parts = cb.split(GLUE_PARAMS)
+              params = (parts.size == 2 ? parts[1].split(GLUE_ITEMS) : []).insert(0, provided)
+              cb_tokens = parts[0].split(GLUE_METHOD)
+              valid = cb_tokens[0].split(GLUE_NAMESPACE).reduce(Module, :const_get).send(cb_tokens[1].to_s, *params)
+              break if valid
+            end
           end
-          valid = valid_cb
-          value = (provided[param].is_a?(Hash) or provided[param].is_a?(Array)) ? provided[param] : provided[param].to_s ####
+          value = (provided.is_a?(Hash) or provided.is_a?(Array)) ? provided : provided.to_s
         end
       end
 
-      # Custom processing of the parameter value
+      # Custom processing of the parameter value (through @supported callback)
       if valid
         if config.has_key?(:cb_process)
           parts = config[:cb_process].split(GLUE_PARAMS)
-          params = (parts.size == 2 ? parts[1].split(GLUE_ITEMS) : []).insert(0, provided[param])
+          params = (parts.size == 2 ? parts[1].split(GLUE_ITEMS) : []).insert(0, provided)
           cb_tokens = parts[0].split(GLUE_METHOD)
           value = cb_tokens[0].split(GLUE_NAMESPACE).reduce(Module, :const_get).send(cb_tokens[1].to_s, *params)
         end
       else
-        puts sprintf(DOA::L10n::UNSUPPORTED_PARAM_VALUE_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
-          DOA::Guest.provisioner.current_project, @label.downcase, param).colorize(:red)
-        raise SystemExit
+        DOA::L10n::print(DOA::L10n::UNSUPPORTED_PARAM_VALUE, DOA::L10n::MSG_TYPE_ERROR,
+          [DOA::Guest.provisioner.current_project, @label.downcase], [param], true)
       end
 
       if !value.nil? and value != mod_def
@@ -214,11 +181,11 @@ class PuppetModule
           new_value = {}
           value.each do |k, v|
             if v.is_a?(FalseClass) or v == 'off'
-              new_value["'#{k}'"] = "'off'"
+              new_value["'#{ k }'"] = "'off'"
             elsif v.is_a?(TrueClass) or v == 'on'
-              new_value["'#{k}'"] = "'on'"
+              new_value["'#{ k }'"] = "'on'"
             else
-              new_value["'#{k}'"] = "'#{v}'"
+              new_value["'#{ k }'"] = "'#{ v }'"
             end
           end
           value = new_value
@@ -226,7 +193,7 @@ class PuppetModule
 
         # Assign value when catched
         maps_to = (config.has_key?(:maps_to) and !config[:maps_to].blank?) ? config[:maps_to] : param
-        stack_settings[maps_to] = case config.has_key?(:expect)
+        queue[maps_to] = case config.has_key?(:expect)
           when true then case (config[:expect] & VALIDATORS_TO_WRAP).size
             when 0 then value
             else "'#{ value.to_s }'"
@@ -235,7 +202,8 @@ class PuppetModule
           end
       end
     end
-    return stack_settings
+
+    return queue
   end
 
   # Adds the required parameters to the corresponding queues:
@@ -245,10 +213,10 @@ class PuppetModule
   # and recursively checks all parameters for the requested software,
   # setting the appropriate values.
   def self.setup(settings)
-    @provided = settings
+    @provided = settings.is_a?(Hash) ? settings : {}
     DOA::Provisioner::Puppet.enqueue_librarian_mods(@librarian) if @librarian.is_a?(Hash) and !@librarian.blank?
     DOA::Provisioner::Puppet.enqueue_hiera_classes(@hieraclasses) if @hieraclasses.is_a?(Array) and !@hieraclasses.blank?
-    DOA::Provisioner::Puppet.enqueue_hiera_params(@label, set_params(@supported, (!settings.nil? and settings.is_a?(Hash)) ? settings : {})) if !@supported.empty?
+    DOA::Provisioner::Puppet.enqueue_hiera_params(@label, set_params()) if !@supported.empty?
     self.send('custom_setup', @provided) if self.respond_to?('custom_setup')
   end
 
@@ -258,6 +226,8 @@ class PuppetModule
     os_distro     = DOA::Provisioner::Puppet.os_distro
     os_distro_ver = DOA::Provisioner::Puppet.os_distro_ver
     def_val       = config['default'] if config.has_key?(type) and config[type].is_a?(Hash) and config[type].has_key?('default')
+    hash_expected = ((!config[:expect].is_a?(Array) and config[:expect] == :hash_values) or
+      (config[:expect].is_a?(Array) and config[:expect].include?(:hash_values)))
 
     config_os = nil
     if config.has_key?(type)
@@ -270,14 +240,18 @@ class PuppetModule
             # If os families is a hash, then check for a specific distro
             if config[type][env].has_key?(os_family)
               config_os = config[type][os_family]
+            elsif hash_expected
+              def_val = config[type][env]
             else
-              puts "error"
+              puts "error 1"
             end
           else
             def_val = config[type][env]
           end
         elsif config[type].has_key?(os_family)
           config_os = config[type]
+        else
+          def_val = config[type]
         end
       else
         def_val = config[type]
@@ -287,11 +261,11 @@ class PuppetModule
       if config_os[os_family].is_a?(Hash)
         # If os distro is a hash, then check for a specific distro version
         if !config_os[os_family].has_key?(os_distro)
-          puts "error"
+          puts "error 2"
         elsif config_os[os_family][os_distro].is_a?(Hash)
           if !config_os[os_family][os_distro].has_key?(os_distro_ver) or
               config_os[os_family][os_distro][os_distro_ver].is_a?(Hash)
-            puts "error"
+            puts "error 3"
           else
             def_val = config_os[os_family][os_distro][os_distro_ver]
           end
@@ -320,18 +294,19 @@ class PuppetModule
 
     # Check support for provided branch
     if @allow_branch.nil? or @allow_branch.include?(@branch)
-      # Specific versions or branches automatically ensure 'held', no
-      # matter the user value (if provided)
-      @version = value.match(DOA::Tools::RGX_SEMVER).captures[0].gsub('X', 'x')
-      @provided['ensure'] = (@branch != @version) ? 'held' :
-        get_default_value(@supported['ensure'], :doa_def)
-      DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
-        "#{ classname }::version" => "'#{ @version }'",
-      })
+      if !value.nil?
+        # Specific versions or branches automatically ensure 'held', no
+        # matter the user value (if provided)
+        @version = value.match(DOA::Tools::RGX_SEMVER).captures[0].gsub('X', 'x')
+        @provided['ensure'] = (@branch != @version) ? 'held' :
+          get_default_value(@supported['ensure'], :doa_def)
+        DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
+          "#{ classname }::version" => "'#{ @version }'",
+        })
+      end
     else
-      puts sprintf(DOA::L10n::NOT_SUPPORTED_BRANCH, DOA::Guest.sh_header, DOA::Guest.hostname,
-        DOA::Guest.provisioner.current_project, @label.downcase, @label, value).colorize(:red)
-      raise SystemExit
+      DOA::L10n::print(DOA::L10n::NOT_SUPPORTED_BRANCH, DOA::L10n::MSG_TYPE_ERROR,
+        [DOA::Guest.provisioner.current_project, @label.downcase], [@label, value], true)
     end
     nil
   end

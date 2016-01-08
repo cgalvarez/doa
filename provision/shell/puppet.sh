@@ -33,7 +33,6 @@ elif [ "${FOUND_APT}" -eq '0' ]; then
   export DEBIAN_FRONTEND=noninteractive
 fi
 
-
 # Install lsb-release if not present
 # ------------------------------------------------------------------------------
 if [ "${FOUND_LSBREL}" -ne '0' ]; then
@@ -45,10 +44,10 @@ if [ "${FOUND_LSBREL}" -ne '0' ]; then
       LSB_PKG='lsb-release'
       ;;
   esac
-  echo 'Checking for lsb-release...'
-  ${PKG_MANAGER} install -q -y ${LSB_PKG} >/dev/null 2>&1
-  MSG='Installing lsb-release...'
-  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
+
+  echo 'Installing lsb-release... (may take a while)'
+  ${PKG_MANAGER} install -q -y ${LSB_PKG} >/dev/null #2>&1
+  [ ${?} -ne 0 ] && echo ${STATUS_ERROR}
 fi
 LSB_ID=$(lsb_release --id --short)
 
@@ -66,7 +65,9 @@ case $PKG_MANAGER in
         REPO_PROOF='/etc/yum.repos.d/puppetlabs-pc1.repo'
         if [ ! -e $REPO_PROOF ]; then
           ADD_REPO=0
-          rpm -ivh "http://yum.puppetlabs.com/puppetlabs-release-el-${LSB_MAJOR_RELEASE}.noarch.rpm" >/dev/null
+          echo 'Installing Puppet Labs repositories... (may take a while)'
+          rpm -ivh "http://yum.puppetlabs.com/puppetlabs-release-el-${LSB_MAJOR_RELEASE}.noarch.rpm" >/dev/null #2>&1
+          [ ${?} -ne 0 ] && echo ${STATUS_ERROR}
         fi
         ;;
     esac
@@ -77,17 +78,17 @@ case $PKG_MANAGER in
     REPO_PROOF='/etc/apt/sources.list.d/puppetlabs-pc1.list'
     if [ ! -e ${REPO_PROOF} ]; then
       ADD_REPO=0
-      wget -q "http://apt.puppetlabs.com/${REPO}"
-      dpkg -i ${REPO} >/dev/null
+      echo 'Installing Puppet Labs repositories... (may take a while)'
+      wget -q "http://apt.puppetlabs.com/${REPO}" >/dev/null #2>&1
+      dpkg -i ${REPO} >/dev/null #2>&1
+      [ ${?} -ne 0 ] && echo ${STATUS_ERROR}
     fi
     ;;
 esac
 if [ "${ADD_REPO}" -eq '0' ]; then
-  echo 'Checking for Puppet Labs repositories...'
-  echo "${REPO_PROOF} not found..."
-  ${PKG_MANAGER} update -y -q >/dev/null 2>&1
-  MSG='Fetching and installing Puppet Labs repositories...'
-  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
+  echo 'Updating system package repositories... (may take a while)'
+  ${PKG_MANAGER} update -y -q >/dev/null #2>&1
+  [ ${?} -ne 0 ] && echo ${STATUS_ERROR}
 fi
 
 
@@ -112,10 +113,10 @@ case $PKG_MANAGER in
     ;;
 esac
 if [ "${INSTALL_PUPPET}" -eq '0' ]; then
-  echo 'Checking for Puppet...'
-  ${PKG_MANAGER} install -q -y ${PUPPET_PKG} >/dev/null 2>&1
-  MSG='Installing the latest version of Puppet...'
-  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
+  echo 'Installing the latest version of Puppet... (may take a while)'
+  rm -f '/etc/puppetlabs/puppet/puppet.conf'
+  ${PKG_MANAGER} install -q -y ${PUPPET_PKG} >/dev/null #2>&1
+  [ ${?} -ne 0 ] && echo ${STATUS_ERROR}
 fi
 
 
@@ -128,10 +129,9 @@ if [ "${FOUND_GIT}" -ne '0' ]; then
       GIT_PKG="makecache ${GIT_PKG}"
       ;;
   esac
-  echo 'Checking for git...'
-  ${PKG_MANAGER} install -y -q ${GIT_PKG} >/dev/null 2>&1
-  MSG='Installing git...'
-  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
+  echo 'Installing git... (may take a while)'
+  ${PKG_MANAGER} install -y -q ${GIT_PKG} >/dev/null #2>&1
+  [ ${?} -ne 0 ] && echo ${STATUS_ERROR}
 fi
 
 
@@ -146,10 +146,9 @@ case $PKG_MANAGER in
     RUBY_PKG="${RUBY_PKG} ruby-json ruby-dev"
     ;;
 esac
-echo 'Checking for Ruby and required gems...'
-${PKG_MANAGER} install -y -q ${RUBY_PKG} >/dev/null 2>&1
-MSG='Installing required Ruby packages...'
-[ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
+echo 'Installing required Ruby packages if not present... (may take a while)'
+${PKG_MANAGER} install -y -q ${RUBY_PKG} >/dev/null #2>&1
+[ ${?} -ne 0 ] && echo ${STATUS_ERROR}
 
 
 # Install/update R10K through the Ruby gem exec bundled within Puppet 4
@@ -157,10 +156,9 @@ MSG='Installing required Ruby packages...'
 command -v r10k >/dev/null 2>&1 && R10K_VER_INSTALLED=$(${PUPPET_BIN_PATH}/r10k version | sed -n 's/\s*r10k\s*\([0-9\.][0-9\.]*\).*/\1/p')
 R10K_VER_CANDIDATE=$(${PUPPET_BIN_PATH}/gem list r10k --remote | sed -n 's/^r10k\s*(\([0-9\.][0-9\.]*\)).*/\1/p')
 if [ -z "${R10K_VER_INSTALLED}" ] || [ "${R10K_VER_INSTALLED}" != "${R10K_VER_CANDIDATE}" ]; then
-  echo 'Checking for R10K...'
-  ${PUPPET_BIN_PATH}/gem install -q r10k >/dev/null 2>&1
-  MSG='Installing the latest version of R10K...'
-  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
+  echo 'Installing the latest version of R10K... (may take a while)'
+  ${PUPPET_BIN_PATH}/gem install -q r10k >/dev/null #2>&1
+  [ ${?} -ne 0 ] && echo ${STATUS_ERROR}
 fi
 
 
@@ -177,11 +175,10 @@ else
   LP_VER_CANDIDATE=$(gem list ${LP_GEM} --remote | sed -n "s/^${LP_GEM}\s*(\([0-9\.][0-9\.]*\)).*/\1/p")
 fi
 if [ -z "${LP_VER_INSTALLED}" ] || [ "${LP_VER_INSTALLED}" != "${LP_VER_CANDIDATE}" ]; then
-  echo 'Checking for librarian-puppet...'
   # Install the most recent 1.x.x version when Ruby 1.8.* installed, but not 2.x.x which needs Ruby 1.9.x or greater
-  [ -n "${LP_MAJOR_VERSION}" ] && gem install -q ${LP_GEM} --version "~>${LP_MAJOR_VERSION}" >/dev/null 2>&1 || gem install -q ${LP_GEM} >/dev/null 2>&1
-  MSG='Installing librarian-puppet...'
-  [ ${?} -eq 0 ] && echo "${MSG} ${STATUS_OK}" || echo "${MSG} ${STATUS_ERROR}"
+  echo 'Installing librarian-puppet... (may take a while)'
+  [ -n "${LP_MAJOR_VERSION}" ] && gem install -q ${LP_GEM} --version "~>${LP_MAJOR_VERSION}" >/dev/null || gem install -q ${LP_GEM} >/dev/null
+  [ ${?} -ne 0 ] && echo ${STATUS_ERROR}
 fi
 
 

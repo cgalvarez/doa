@@ -1452,13 +1452,10 @@ module DOA
         end
 
         def self.custom_setup(provided)
-          if DOA::Guest.provisioner.current_stack.has_key?(DOA::Setting::SW_WP)
-            # Guess if WordPress must be installed in a subdirectory or not
-            subdir   = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_WP, 'wp', 'subdirectory'], DOA::Setting::PM_WP)
-            subdir   = subdir.empty? ? '' : (['true', 'on', 'yes', '1'].include?(subdir.to_s) ? DOA::Guest.provisioner.current_project : subdir)
-            www_root = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_WP, 'wp', 'install', 'dir'], DOA::Setting::PM_WP)
-            www_root = DOA::Provisioner::Puppet::WordPress::DEF_INSTALL_DIR if www_root.empty?
-            socket   = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_PHP, 'fpm', 'pools', '*', 'listen', 'socket'], DOA::Setting::PM_WP)
+          if DOA::Guest.provisioner.current_project.nil?
+            # Group WordPress projects by vhost root
+            wp_projects = {}
+            socket = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_PHP, 'fpm', 'pools', '*', 'listen', 'socket'], DOA::Setting::PM_WP)
             if DOA::Tools.valid_ipv4_port?(socket)
               upstream_member = socket
             elsif DOA::Tools.valid_unix_abspath?(socket)
@@ -1466,60 +1463,164 @@ module DOA
             else
               upstream_member = '127.0.0.1:9000'
             end
-            DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
-              @supported['vhosts'][:maps_to] => {
-                "'#{ DOA::Guest.provisioner.current_project }'" => {
-                  'ensure'                => "'present'",
-                  'listen_port'           => "'80'",
-                  'spdy'                  => "'on'",
-                  'use_default_location'  => 'false',
-                  'www_root'              => "'#{ www_root }'",
-                  'index_files'           => ["'index.html'", "'index.htm'", "'index.php'"],
-                },
-              },
-              @supported['locations'][:maps_to] => {
-                "'#{ DOA::Guest.provisioner.current_project }_wp_static'" => {
-                  'ensure'              => "'present'",
-                  'vhost'               => "'#{ DOA::Guest.provisioner.current_project }'",
-                  #'location'            => "'~* ^/#{ Guest.provisioner.current_project }(/.+\\.(?:ogg|ogv|svg|svgz|eot|otf|woff|mp4|ttf|rss|atom|jpg|jpeg|gif|png|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|tar|mid|midi|wav|bmp|rtf|js|css|htm|html))$'",
-                  #'location'            => "'~* ^/#{ Guest.provisioner.current_project }/.+\\.(?:#{ STATIC_EXTS.join('|') })$'",
-                  'location'            => "'~* ^" + (subdir ? "/#{ subdir }" : '') + "/.+\\.(?:#{ STATIC_EXTS.join('|') })$'",
-                  'location_custom_cfg' => {
-                    "'expires'"         => "'max'",
-                    "'access_log'"      => "'off'",
-                    #{}"'try_files'"       => "'$1 =403'",
+            projects = DOA::Tools.check_get(DOA::Guest.settings, DOA::Tools::TYPE_HASH,
+              [DOA::Guest.hostname, DOA::Guest.hostname], DOA::Setting::PROJECTS)
+            projects.each do |project, settings|
+              if settings.has_key?('stack') and settings['stack'].has_key?(DOA::Setting::SW_WP)
+                # The virtual host root is the installation dir of the WP instance app
+                www_root = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_WP, 'wp', 'install', 'dir'], DOA::Setting::PM_WP, settings['stack'])
+                www_root = DOA::Provisioner::Puppet::WordPress::DEF_INSTALL_DIR if www_root.empty?
+                subdir   = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_WP, 'wp', 'subdirectory'], DOA::Setting::PM_WP, settings['stack'])
+                subdir   = subdir.empty? ? '' : (['true', 'on', 'yes', '1'].include?(subdir.to_s) ? project : subdir)
+                wp_projects[www_root] = {} if !wp_projects.has_key?(www_root)
+
+                # Top installation
+                if subdir.empty?
+                  wp_projects[www_root][:top] = [] if !wp_projects[www_root].has_key?(:top)
+                # Subdir installation
+                else
+                  wp_projects[www_root][:subdir] = [] if !wp_projects[www_root].has_key?(:subdir)
+                  wp_projects[www_root][:subdir].insert(-1, subdir)
+                end
+              end
+            end
+
+            if !wp_projects.empty?
+              # Add new aliases for WP & PMA and update hosts file @ host
+              pma_server = "pma.#{ DOA::Guest.name }.vm"
+              wp_server = "wp.#{ DOA::Guest.name }.vm"
+              DOA::Guest.set_aliases(DOA::Guest.aliases.insert(-1, wp_server, pma_server))
+
+              # PHP upstream
+              DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
+                @supported['upstreams'][:maps_to] => { "'php'" => {
+                    'ensure'  => "'present'",
+                    'members' => ["'#{ upstream_member }'"],
+                  }}})
+
+              # phpMyAdmin virtual host
+              DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
+                  @supported['vhosts'][:maps_to] => {
+                    pma_server => {
+                      'ensure'                => "'present'",
+                      'listen_port'           => "'80'",
+                      'spdy'                  => "'on'",
+                      'use_default_location'  => 'false',
+                      'www_root'              => "'#{ DEF_WWW_ROOT }/pma'",
+                      'index_files'           => ["'index.html'", "'index.htm'", "'index.php'"],
+                    },
                   },
-                },
-                "'#{ DOA::Guest.provisioner.current_project }_wp_php'" => {
-                  'ensure'                      => "'present'",
-                  'vhost'                       => "'#{ DOA::Guest.provisioner.current_project }'",
-                  #'try_files'                 => ["'/$1'", "'/$1/'", "'/index.php?$args'", "'=404'"],
-                  'try_files'                   => [
-                    "'$uri'",
-                    "'$uri/'",
-                    "'" + (subdir ? "/#{ subdir }" : '') + "/index.php?$args'",
-                  ],
-                  'fastcgi'                     => "'php'",
-                  'fastcgi_param'               => {
-                    "'SCRIPT_FILENAME'"         => "'$document_root$fastcgi_script_name'",
+                  @supported['locations'][:maps_to] => {
+                    "'pma_static'" => {
+                      'ensure'              => "'present'",
+                      'vhost'               => pma_server,
+                      'location'            => "'~* \\.(#{ STATIC_EXTS.join('|') })$'",
+                      'location_custom_cfg' => {
+                        "'expires'"         => "'max'",
+                        "'access_log'"      => "'off'",
+                      },
+                    },
+                    "'pma_upstream_php'" => {
+                      'ensure'                      => "'present'",
+                      'vhost'                       => pma_server,
+                      'fastcgi'                     => "'php'",
+                      'fastcgi_param'               => {
+                        "'SCRIPT_FILENAME'"         => "'$document_root$fastcgi_script_name'",
+                      },
+                      'location'                    => "'~* \\.php$'",
+                      'location_cfg_append'         => {
+                        "'fastcgi_connect_timeout'" => "'3m'",
+                        "'fastcgi_read_timeout'"    => "'3m'",
+                        "'fastcgi_send_timeout'"    => "'3m'",
+                        "'fastcgi_index'"           => "'index.php'",
+                      },
+                    },
                   },
-                  #'location'                  => "'~* ^/#{ Guest.provisioner.current_project }/?(.*)$'",
-                  'location'                    => "/#{ subdir }",
-                  'location_cfg_append'         => {
-                    "'fastcgi_connect_timeout'" => "'3m'",
-                    "'fastcgi_read_timeout'"    => "'3m'",
-                    "'fastcgi_send_timeout'"    => "'3m'",
-                    "'fastcgi_index'"           => "'index.php'",
+                })
+
+              # WordPress virtual host
+              wp_projects.each do |root, settings|
+                root_params = {}
+                esc_root = root.gsub('/', '_')
+                location_map = @supported['locations'][:maps_to]
+
+                # Nginx virtual host (vhost)
+                root_params[@supported['vhosts'][:maps_to]] = {
+                  wp_server => {
+                    'ensure'                => "'present'",
+                    'listen_port'           => "'80'",
+                    'spdy'                  => "'on'",
+                    'use_default_location'  => 'false',
+                    'www_root'              => "'#{ root }'",
+                    'index_files'           => ["'index.html'", "'index.htm'", "'index.php'"],
                   },
-                },
-              },
-              @supported['upstreams'][:maps_to] => {
-                "'php'" => {
-                  'ensure'  => "'present'",
-                  'members' => ["'#{ upstream_member }'"],
-                },
-              },
-            })
+                }
+
+                # Nginx location for static files
+                root_params[location_map] = {
+                  "'wp#{ esc_root }_static'" => {
+                    'ensure'              => "'present'",
+                    'vhost'               => wp_server,
+                    'location'            => "'~* \\.(#{ STATIC_EXTS.join('|') })$'",
+                    'location_custom_cfg' => {
+                      "'expires'"         => "'max'",
+                      "'access_log'"      => "'off'",
+                    },
+                  },
+                }
+
+                # Nginx location for WordPress installations in subdirectories
+                if settings.has_key?(:subdir)
+                  root_params[location_map]["'wp#{ esc_root }_upstream_php'"] = {
+                    'ensure'                      => "'present'",
+                    'vhost'                       => wp_server,
+                    'try_files'                   => [
+                      "'$uri'",
+                      "'$uri/'",
+                      "'/$1/index.php?$args'",
+                    ],
+                    'fastcgi'                     => "'php'",
+                    'fastcgi_param'               => {
+                      "'SCRIPT_FILENAME'"         => "'$document_root$fastcgi_script_name'",
+                    },
+                    'location'                    => "'~ ^/(#{ wp_projects[root][:subdir].join('|') })'",
+                    'location_cfg_append'         => {
+                      "'fastcgi_connect_timeout'" => "'3m'",
+                      "'fastcgi_read_timeout'"    => "'3m'",
+                      "'fastcgi_send_timeout'"    => "'3m'",
+                      "'fastcgi_index'"           => "'index.php'",
+                    },
+                  }
+                end
+
+                # Nginx location for top WordPress installation
+                if settings.has_key?(:top)
+                  root_params[location_map]["'wp#{ esc_root }_upstream_php_top'"] = {
+                    'ensure'                      => "'present'",
+                    'vhost'                       => wp_server,
+                    'try_files'                   => [
+                      "'$uri'",
+                      "'$uri/'",
+                      "'/index.php?$args'",
+                    ],
+                    'fastcgi'                     => "'php'",
+                    'fastcgi_param'               => {
+                      "'SCRIPT_FILENAME'"         => "'$document_root$fastcgi_script_name'",
+                    },
+                    'location'                    => "'/'",
+                    'location_cfg_append'         => {
+                      "'fastcgi_connect_timeout'" => "'3m'",
+                      "'fastcgi_read_timeout'"    => "'3m'",
+                      "'fastcgi_send_timeout'"    => "'3m'",
+                      "'fastcgi_index'"           => "'index.php'",
+                    },
+                  }
+                end
+
+                # Enqueue hiera params
+                DOA::Provisioner::Puppet.enqueue_hiera_params(@label, root_params) if !root_params.empty?
+              end
+            end
           end
         end
       end

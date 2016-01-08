@@ -5,6 +5,7 @@ require_relative 'puppet/couchdb'
 require_relative 'puppet/mariadb'
 require_relative 'puppet/meteor'
 require_relative 'puppet/nginx'
+require_relative 'puppet/nodejs'
 require_relative 'puppet/php'
 require_relative 'puppet/wordpress'
 
@@ -117,7 +118,8 @@ module DOA
               [DOA::Guest.hostname, DOA::Guest.hostname], DOA::Setting::VM_STACK, {}),
           }
         ]
-        projects.each do |project, project_settings|
+
+        @@projects.each do |project, project_settings|
           stacks.insert(-1, {
               :vm    => DOA::Guest.hostname,
               :proj  => project,
@@ -138,10 +140,13 @@ module DOA
               when DOA::Setting::SW_MARIADB then 'MariaDB'
               when DOA::Setting::SW_METEOR then 'Meteor'
               when DOA::Setting::SW_NGINX then 'Nginx'
+              when DOA::Setting::SW_NODEJS then 'NodeJS'
               when DOA::Setting::SW_PHP then 'PHP'
               when DOA::Setting::SW_WP then DOA::Setting::PM_WP
               end
-            if DOA::Provisioner::Puppet.const_defined?(sw_mod) and (subclass = DOA::Provisioner::Puppet.const_get(sw_mod)).is_a?(Class) and
+
+            if DOA::Provisioner::Puppet.const_defined?(sw_mod) and
+                (subclass = DOA::Provisioner::Puppet.const_get(sw_mod)).is_a?(Class) and
                 subclass < PuppetModule and subclass.respond_to?('setup')
               subclass.send('setup', sw_settings)
             else
@@ -233,7 +238,7 @@ module DOA
           "cd #{ CONFDIR }",
           #"sudo r10k puppetfile install",    # Download the 3rd party modules into the guest machine
           'sudo librarian-puppet update',     # Download the 3rd party modules (and their deps) into the guest machine
-          'papply',                           # Execute provisioning
+          #'papply',                           # Execute provisioning
         ])
         #puts DOA::L10n::SUCCESS_OK
         puts "[FIX]"
@@ -455,13 +460,12 @@ module DOA
       # Insert content into the guest manifest.
       # +content+:: string with the content to append to 'site.pp' manifest
       def self.enqueue_site_content(content)
-        # Set the appropriate relationships through chaining arrows when requested
         if content.nil? or !content.is_a?(String)
           puts sprintf(DOA::L10n::WRONG_TYPE_FN_PARAM_CTX_SW, DOA::Guest.sh_header, DOA::Guest.hostname,
             @@current_project, @@current_sw, 'content', 'String', 'Puppet#enqueue_site_content').colorize(:red)
           raise SystemExit
         elsif content.present?
-          @@site_content.insert(-1, content) if !content.empty?
+          @@site_content.insert(-1, content) if !content.empty? and !@@site_content.include?(content)
         end
       end
 

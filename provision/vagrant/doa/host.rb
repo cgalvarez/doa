@@ -196,7 +196,8 @@ module DOA
         FileUtils.rm_rf(@@session.path)
       else
         print "#{ DOA::Guest.sh_header } Cleaning temporary files for current session @ #{ @@hostname }... "
-        exclude = ['.', '..', File.basename(@@session.ppk)]
+        exclude = ['.', '..', File.basename(@@session.ppk),
+          File.basename(@@session.launcher), File.basename(@@session.listener)]
         Dir.foreach(@@session.path) do |item|
           next if exclude.include?(item)
           FileUtils.rm("#{ @@session.path }/#{ item }")
@@ -275,7 +276,7 @@ module DOA
           hosts.elements.delete_at(section)
         # Delete entry for current guest in case of multiple entries
         else
-          hosts.elements[section].elements.delete_at(entry_idx)
+          hosts.elements[section].elements.delete_at(entry)
         end
       # Case add/update entry
       else

@@ -25,7 +25,7 @@ module DOA
     CONN_CLOSED = "%s Connection terminated or wrong password entered. Please, try again...".colorize(:red)
     MAX_RETRIES_REACHED = "%s Aborting... Maximum number of retries reached...".colorize(:red)
     RELOADING_AUTH_KEYS = "%s Reloading authorized keys... %s"
-    FULL_INITIAL_BIRSYNC = "%s Performing full initial %s <-> bidi-rsyncing (be patient)... "
+    FULL_INITIAL_PRESYNC = "%s Performing full initial sync host <- %s (be patient)... "
     FAILED_SYNC = "%s Initial sync failed for:\n%s\n"
 
     # guest.rb
@@ -38,8 +38,10 @@ module DOA
     # sync.rb
     START_BG_LISTENING = "%s Start background-listening FSEvents @ %s... "
     SCP_LISTENER = "%s Secure copy of listener script into %s... "
+    SCP_PRESYNC = "%s Secure copy of presync script into %s... "
     INSTALL_RUBY_GEMS_LISTENER = "%s Installing required ruby gems for listening FSEvents @ %s (be patient)... "
     CREATE_LISTENER = "%s Creating listener script for FSEvents @ %s... "
+    CREATE_PRESYNC = "%s Creating presync script... "
     CREATE_BG_LAUNCHER = "%s Creating background-launcher for %s listener script... "
     STOP_BG_LISTENING = "%s Stop background-listening FSEvents @ %s... "
 
@@ -49,19 +51,15 @@ module DOA
 
     # puppet.rb
     UNSUPPORTED_SW = "\n%s ERROR [%s » %s]: The software '%s' has no support... "
-    UNRECOGNIZED_SW_PARAM = "\n%s ERROR [%s » %s » %s]: Unrecognized parameter '%s'... "
     UNRECOGNIZED_VERSION = "\n%s ERROR [%s » %s » %s » %s]: Unrecognized reserved keyword, malformed semver string or not allowed string... "
     SETTING_UP_PROVISIONER = "%s Setting up provisioner %s for %s... "
     PROVISIONING_STACK = "%s Provisioning requested stack for %s with %s... "
-    ###CREATING_PUPPETFILE = "%s Creating Puppetfile for %s..."
-    ###CREATING_FILE = "%s Creating %s for %s..."
-    NOT_SUPPORTED_BRANCH = "\n%s ERROR [%s » %s » %s]: %s currently has no support for branch %s"
     INCOMPAT_SETTINGS_LIBRARIAN_MOD = "\n%s ERROR: Incompatible settings for librarian-puppet module of '%s'"
 
     # mariadb.rb
-    MARIADB_NO_SUPPORT  = "\n%s ERROR [%s » %s » %s]: %s currently has no support for %s"
-    VERSION_INCOMP      = "\n%s ERROR [%s » %s » %s]: %s cannot be '%s' when providing a specific version"
-    BRANCH_INCOMP       = "\n%s ERROR [%s » %s » %s]: All involved packages must belong to the same branch"
+    MARIADB_NO_SUPPORT  = "%s currently has no support for %s"
+    VERSION_INCOMP      = "%s cannot be '%s' when providing a specific version"
+    BRANCH_INCOMP       = "All involved packages must belong to the same branch"
 
     #
     MISSING_PATH = "%s ERROR [%s]: You must provide the path for the addon '%s'"
@@ -80,10 +78,6 @@ module DOA
     WRONG_TYPE_FN_PARAM_CTX_PROJECT    = "\n%s ERROR [%s » %s]: Parameter '%s' must be %s type for method '%s'"
     WRONG_TYPE_FN_PARAM_CTX_SW      = "\n%s ERROR [%s » %s » %s]: Parameter '%s' must be %s type for method '%s'"
     WRONG_TYPE_FN_PARAM_CTX_ASSET   = "\n%s ERROR [%s » %s » %s » %s]: Parameter '%s' must be %s type for method '%s'"
-    #WRONG_TYPE_VALUE_CTX_VM         = "\n%s ERROR [%s]: Parameter '%s' must be %s type"
-    #WRONG_TYPE_VALUE_CTX_PROJECT       = "\n%s ERROR [%s » %s]: Parameter '%s' must be %s type for method '%s'"
-    #WRONG_TYPE_VALUE_CTX_SW         = "\n%s ERROR [%s » %s » %s]: Parameter '%s' must be %s type for method '%s'"
-    #WRONG_TYPE_VALUE_CTX_ASSET      = "\n%s ERROR [%s » %s » %s » %s]: Parameter '%s' must be %s type for method '%s'"
     MALFORMED_FN_PARAM_CTX_VM       = "\n%s ERROR [%s]: Malformed parameter '%s' in method '%s'"
     MALFORMED_FN_PARAM_CTX_PROJECT     = "\n%s ERROR [%s » %s]: Malformed parameter '%s' in method '%s'"
     MALFORMED_FN_PARAM_CTX_SW       = "\n%s ERROR [%s » %s » %s]: Malformed parameter '%s' in method '%s'"
@@ -96,9 +90,25 @@ module DOA
     UNSUPPORTED_PARAM_VALUE_CTX_PROJECT  = "\n%s ERROR [%s » %s]: Unsupported value for parameter '%s'"
     UNSUPPORTED_PARAM_VALUE_CTX_SW    = "\n%s ERROR [%s » %s » %s]: Unsupported value for parameter '%s'"
     UNSUPPORTED_PARAM_VALUE_CTX_ASSET = "\n%s ERROR [%s » %s » %s » %s]: Unsupported value for parameter '%s'"
-    EXCLUSIVE_CTX_VM    = "\n%s ERROR [%s]: Parameters '%s' and '%s' are mutually exclusive"
-    EXCLUSIVE_CTX_PROJECT  = "\n%s ERROR [%s » %s]: Parameters '%s' and '%s' are mutually exclusive"
-    EXCLUSIVE_CTX_SW    = "\n%s ERROR [%s » %s » %s]: Parameters '%s' and '%s' are mutually exclusive"
-    EXCLUSIVE_CTX_ASSET = "\n%s ERROR [%s » %s » %s » %s]: Parameters '%s' and '%s' are mutually exclusive"
+
+    UNRECOGNIZED_PARAM      = "Unrecognized parameter '%s'... "
+    UNSUPPORTED_VALUE       = "Unsupported value '%s' for parameter '%s'"
+    UNSUPPORTED_PARAM_VALUE = "Unsupported value for parameter '%s'"
+    EMPTY_PARAM             = "Parameter '%s' cannot be empty"
+    EXCLUSIVE_PARAMS        = "Parameters '%s' and '%s' are mutually exclusive"
+    NOT_SUPPORTED_BRANCH    = "%s currently has no support for branch %s"
+    PATH_NOT_FOUND          = "Provided path not found => %s"
+
+    MSG_TYPE_ERROR = 'error'
+    MSG_TYPE = {
+      MSG_TYPE_ERROR  => :red,
+    }
+
+    def self.print(msg, type, path_els, params, raise_exit = false)
+      path_els = [DOA::Guest.hostname] + path_els.reject { |item| item.nil? || item == '' }
+      puts ("\n#{ DOA::Guest.sh_header } #{ type.upcase } [#{ path_els.join(' » ') }]: " +
+        sprintf(msg, *params)).colorize(MSG_TYPE[type])
+      raise SystemExit if raise_exit
+    end
   end
 end

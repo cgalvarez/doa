@@ -387,7 +387,20 @@ module DOA
       if item.is_a?(String) or item.is_a?(Integer)
         return " #{ item.to_s }"
       elsif item.is_a?(Array)
-        return item.size > 0 ? "\n#{ indent }- #{ item.join("\n#{ indent }- ") }" : ''
+        if item.size > 0
+          if item[0].is_a?(Hash)  # Array of hashes
+            arr_h = ''
+            item.each do |h|
+              first = h.shift
+              arr_h += "\n#{ indent }- #{ first[0].to_s }: #{ first[1].to_s }#{ Tools.format_yaml(h, depth + 1) }"
+            end
+            return arr_h
+          else
+            return "\n#{ indent }- #{ item.join("\n#{ indent }- ") }"
+          end
+        else
+          return ''
+        end
       elsif item.is_a?(Hash)
         text = ''
         item.keys.sort.each { |k| item[k] = item.delete k }
@@ -417,20 +430,16 @@ module DOA
       return recursion.nil? ? nil : puppetmod.get_default_value(recursion, type)
     end
 
-    def self.get_puppet_mod_prioritized_def_value(path, puppetmod)
-      ###value = DOA::Tools.recursive_get(DOA::Guest.provisioner.current_stack, path)
-      ###value = DOA::Tools.recursive_get(DOA::Guest.settings['stack'], path) if value.empty?
-      value = recursive_get(DOA::Guest.provisioner.current_stack, path)
+    def self.get_puppet_mod_prioritized_def_value(path, puppetmod, stack = nil)
+      stack = DOA::Guest.provisioner.current_stack if stack.nil?
+      value = recursive_get(stack, path)
       value = recursive_get(DOA::Guest.settings['stack'], path) if value.empty?
       filtered_path = path - ['*']
-      ###value = DOA::Tools.get_puppet_mod_def_value(puppetmod, filtered_path, :doa_def) if value.empty?
-      ###value = DOA::Tools.get_puppet_mod_def_value(puppetmod, filtered_path, :mod_def) if value.empty?
       value = get_puppet_mod_def_value(puppetmod, filtered_path, :doa_def) if value.empty?
       value = get_puppet_mod_def_value(puppetmod, filtered_path, :mod_def) if value.empty?
       return value
     end
     def self.recursive_get(hash, keys)
-      #keys = path.split(GLUE_KEYS)
       found, recursion, last = false, hash, keys.last
       keys.each_with_index do |key, index|
         if key == '*'
@@ -505,11 +514,39 @@ class ::Hash
   def recursive_set!(keys, value)
     key = keys.shift
     if !keys.empty?
+      self[key] = {} if !self[key].is_a?(Hash)
       self[key].recursive_set!(keys, value)
     else
       self[key] = value
     end
     true
+  end
+
+  def recursive_get(keys, fail_msg = nil, provided = false, recursion = false)
+    keys = recursion ? keys : keys.map {|x| x}
+    keys -= [:children, :children_hash] if provided
+    if keys.empty?
+      self
+    else
+      key = keys.shift
+      if !provided and key == :children_hash
+        keys.shift
+      end
+      if !self.has_key?(key)
+        if !fail_msg.nil?
+          DOA::L10n::print(DOA::L10n::UNRECOGNIZED_PARAM, DOA::L10n::MSG_TYPE_ERROR,
+            [DOA::Guest.provisioner.current_project, DOA::Guest.provisioner.current_sw], [key], true)
+        else
+          nil
+        end
+      else
+        if self[key].nil?
+          nil
+        else
+          keys.empty? ? self[key] : self[key].recursive_get(keys, fail_msg, provided, true)
+        end
+      end
+    end
   end
 end
 

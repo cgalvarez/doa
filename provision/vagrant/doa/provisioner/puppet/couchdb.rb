@@ -16,7 +16,7 @@ module DOA
         @librarian    = {
           MOD_CGALVAREZ_COUCHDB => {
             :git  => 'git://github.com/cgalvarez/puppet-couchdb.git',
-            :ver  => '1.0.0',
+            :ver  => '1.0.3',
           },
         }
         @supported = {
@@ -24,12 +24,6 @@ module DOA
               :expect     => [:semver_version, :semver_branch],
               :maps_to    => "#{ CL_COUCHDB }::version",
               :cb_process => "#{ self.to_s }#process_version@#{ CL_COUCHDB }",
-              :mod_def    => nil,
-              :doa_def    => {
-                :dev      => nil,
-                :test     => nil,
-                :prod     => nil,
-              },
             },
             'ensure' => {
               :expect  => [:string],

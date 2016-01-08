@@ -8,6 +8,7 @@ module DOA
 
     # Class variables
     @@listener        = nil
+    @@presync         = nil
     @@launcher        = nil
     @@hosts_pp        = nil
     @@papply          = nil
@@ -49,6 +50,9 @@ module DOA
     def self.site_pp
       @@site_pp
     end
+    def self.presync
+      @@presync
+    end
 
     # Makes the default initialization.
     def self.initialize
@@ -62,6 +66,7 @@ module DOA
       @@hostname_yaml   = "#{ DOA::Env.vagrant_provision_path }/templates/hostname_yaml.erb"
       @@hiera_yaml      = "#{ DOA::Env.vagrant_provision_path }/templates/hiera_yaml.erb"
       @@site_pp         = "#{ DOA::Env.vagrant_provision_path }/templates/site_pp.erb"
+      @@presync         = "#{ DOA::Env.vagrant_provision_path }/templates/presync.erb"
     end
   end
 end

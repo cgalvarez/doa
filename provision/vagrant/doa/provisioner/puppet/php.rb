@@ -13,23 +13,50 @@ module DOA
         @label        = 'PHP'
         @hieraclasses = ['php']
         @librarian    = {
-          MOD_MAYFLOWER_PHP => {},
+          MOD_MAYFLOWER_PHP => {
+            :git => 'git://github.com/mayflower/puppet-php.git',
+          },
         }
 
         # Puppet modules parameters.
         # mayflower/php => https://github.com/mayflower/puppet-php
         @supported = {
-            'core' => {
+            'params' => {
               :children   => {
+                'config_root' => {
+                  :expect     => [:unix_abspath],
+                  :maps_to    => 'php::params::cfg_root',
+                  :mod_def    => {
+                    'default' => '/etc/php5',
+                    'redhat'  => nil,
+                    'freebsd' => '/usr/local/etc',
+                  },
+                },
+              },
+            },
+            'cli' => {
+              :children   => {
+                # Specify which version of PHP packages to install, defaults to 'latest'.
+                # Please note that 'absent' to remove packages is not supported!
                 'ensure' => {
                   :expect     => [:string],
                   :allow      => ['absent', 'purged', 'present', 'installed', 'latest', 'held'],
-                  :maps_to     => 'php::ensure',
+                  :maps_to    => 'php::ensure',
                   :mod_def    => 'latest',
                   :doa_def    => {
                     :dev      => 'latest',
                     :test     => 'latest',
                     :prod     => 'present',
+                  },
+                },
+                # The path to the ini php-cli ini file.
+                'inifile' => {
+                  :expect     => [:puppet_interpolable_uri],
+                  :maps_to     => 'php::cli::inifile',
+                  :mod_def    => {
+                    'default' => '/etc/php5/cli/php.ini',
+                    'redhat'  => '/etc/php-cli.ini',
+                    'freebsd' => '/usr/local/etc/php-cli.ini',
                   },
                 },
               },
@@ -50,14 +77,30 @@ module DOA
                     :prod     => 'present',
                   },
                 },
+                'service_name' => {
+                  :expect     => [:string],
+                  :maps_to    => 'php::fpm::service::service_name',
+                  :mod_def    => {
+                    'default' => 'php-fpm',
+                    'debian'  => 'php5-fpm',
+                  },
+                },
+                'inifile' => {
+                  :expect     => [:puppet_interpolable_uri],
+                  :maps_to    => 'php::fpm::inifile',
+                  :mod_def    => {
+                    'default' => '/etc/php5/fpm/php.ini',
+                    'redhat'  => '/etc/php.ini',
+                    'freebsd' => '/usr/local/etc/php.ini',
+                  },
+                },
                 'config' => {
                   :children  => {
                     'config_file' => {
                       :expect     => [:unix_abspath],
                       :maps_to    => 'php::fpm::config::config_file',
                       :mod_def    => {
-                        'debian'  => '/etc/php5/fpm/php-fpm.conf',
-                        'suse'    => '/etc/php5/fpm/php-fpm.conf',
+                        'default' => '/etc/php5/fpm/php-fpm.conf',
                         'redhat'  => '/etc/php-fpm.conf',
                         'freebsd' => '/usr/local/etc/php-fpm.conf',
                       },
@@ -96,8 +139,7 @@ module DOA
                       :expect     => [:string],
                       :maps_to    => 'php::fpm::config::inifile',
                       :mod_def    => {
-                        'debian'  => '/etc/php5/fpm/php.ini',
-                        'suse'    => '/etc/php5/fpm/php.ini',
+                        'default' => '/etc/php5/fpm/php.ini',
                         'redhat'  => '/etc/php.ini',
                         'freebsd' => '/usr/local/etc/php.ini',
                       },
@@ -105,7 +147,7 @@ module DOA
                     'settings' => {
                       :expect     => [:hash],
                       :maps_to    => 'php::fpm::config::settings',
-                      :mod_def    => '{}',
+                      #:mod_def    => '{}',
                     },
                     'pool' => {
                       :children  => {
@@ -113,8 +155,7 @@ module DOA
                           :expect     => [:unix_abspath],
                           :maps_to    => 'php::fpm::config::pool_base_dir',
                           :mod_def    => {
-                            'debian'  => '/etc/php5/fpm/pool.d',
-                            'suse'    => '/etc/php5/fpm/pool.d',
+                            'default' => '/etc/php5/fpm/pool.d',
                             'redhat'  => '/etc/php-fpm.d',
                             'freebsd' => '/usr/local/etc/php-fpm.d',
                           },
@@ -173,6 +214,24 @@ module DOA
                           :maps_to    => 'php::fpm::config::log_dir_mode',
                           :mod_def    => '0770',
                         },
+                        'error_filepath' => {
+                          :expect     => [:unix_abspath],
+                          :maps_to    => 'php::fpm::config::error_log',
+                          :mod_def    => {
+                            'default' => '/var/log/php5-fpm.log',
+                            'redhat'  => '/var/log/php-fpm/error.log',
+                            'freebsd' => '/var/log/php-fpm.log',
+                          },
+                        },
+                      },
+                    },
+                    'pid_filepath' => {
+                      :expect     => [:unix_abspath],
+                      :maps_to    => 'php::fpm::config::pid_file',
+                      :mod_def    => {
+                        'default' => '/var/run/php5-fpm.pid',
+                        'redhat'  => '/var/run/php-fpm/php-fpm.pid',
+                        'freebsd' => '/var/run/php-fpm.pid',
                       },
                     },
                   },
@@ -350,69 +409,70 @@ module DOA
                     #user, group, slowlog, root_group
                   },
                 },
+                'settings' => {
+                  :maps_to    => 'php::fpm::settings',
+                  :expect     => [:hash_values],
+                  :doa_def    => {
+                    'Date/date.timezone'            => 'Europe/Madrid',
+                    'PHP/allow_url_fopen'           => 'Off',
+                    'PHP/allow_url_include'         => 'Off',
+                    'PHP/cgi.fix_pathinfo'          => 0,
+                    # php_uname used by phpmyadmin
+                    'PHP/disable_functions'         => 'getmyuid, getmypid, passthru, leak, listen, diskfreespace, tmpfile, link, ignore_user_abord, shell_exec, dl, set_time_limit, exec, system, highlight_file, source, show_source, fpaththru, virtual, posix_ctermid, posix_getcwd, posix_getegid, posix_geteuid, posix_getgid, posix_getgrgid, posix_getgrnam, posix_getgroups, posix_getlogin, posix_getpgid, posix_getpgrp, posix_getpid, posix, _getppid, posix_getpwnam, posix_getpwuid, posix_getrlimit, posix_getsid, posix_getuid, posix_isatty, posix_kill, posix_mkfifo, posix_setegid, posix_seteuid, posix_setgid, posix_setpgid, posix_setsid, posix_setuid, posix_times, posix_ttyname, posix_uname, proc_open, proc_close, proc_get_status, proc_nice, proc_terminate',
+                    'PHP/enable_dl'                 => 'Off',
+                    'PHP/expose_php'                => 'Off',
+                    'PHP/session.save_path'         => '/var/lib/php',
+                    'PHP/session.cookie_httponly'   => 1,
+                    'PHP/display_errors'            => 'On',
+                    'PHP/display_startup_errors'    => 'On',
+                    'PHP/track_errors'              => 'On',
+                    'PHP/html_errors'               => 'On',
+                  },
+                },
               },
             },
             'phpunit' => {
               :maps_to    => 'php::phpunit',
-              :cb_process => "#{ self.to_s }#set_hiera_param@phpunit",
+              #:cb_process => "#{ self.to_s }#set_hiera_param@phpunit",
               :mod_def    => 'false',
-              :doa_def    => {
-                :dev      => 'true',
-                :test     => 'true',
-                :prod     => 'false',
-              },
-              :children  => {
-                'ensure' => {
+              :children   => {
+                'ensure'  => {
                   :expect     => [:string],
                   :allow      => ['absent', 'purged', 'present', 'installed', 'latest', 'held'],
                   :maps_to    => 'php::phpunit::ensure',
-                  :mod_def    => 'latest',
-                  :doa_def    => {
-                    :dev      => 'latest',
-                    :test     => 'latest',
-                    :prod     => 'absent',
-                  },
+                  :mod_def    => 'present',
                 },
+              },
+            },
+            'config_root_ini' => {
+              :maps_to    => 'php::config_root_ini',
+              :expect     => [:unix_abspath],
+              :mod_def    => {
+                'debian'  => '/etc/php5/mods-available',
+                'suse'    => '/etc/php5/conf.d',
+                'redhat'  => '/etc/php.d',
+                'freebsd' => '/usr/local/etc/php',
+              },
+            },
+            'ext_tool_enable' => {
+              :maps_to    => 'php::ext_tool_enable',
+              :expect     => [:unix_abspath],
+              :mod_def    => {
+                'default' => nil,
+                'debian'  => '/usr/sbin/php5enmod',
+              },
+            },
+            'ext_tool_query' => {
+              :maps_to    => 'php::ext_tool_query',
+              :expect     => [:unix_abspath],
+              :mod_def    => {
+                'default' => nil,
+                'debian'  => '/usr/sbin/php5query',
               },
             },
             'extensions' => {
               :maps_to    => 'php::extensions',
               :children_hash => {
-                # package_prefix, compiler_packages
-                'ensure' => {
-                  :expect     => [:string],
-                  :allow      => ['absent', 'purged', 'present', 'installed', 'latest', 'held'],
-                  :mod_def    => 'installed',
-                  :doa_def    => {
-                    :dev      => 'latest',
-                    :test     => 'latest',
-                    :prod     => 'present',
-                  },
-                },
-                'provider' => {
-                  :expect     => [:string],
-                  :allow      => ['pecl', 'aix', 'appdmg', 'apt', 'aptitude', 'aptrpm', 'blastwave', 'dpkg', 'fink', 'freebsd', 'gem', 'hpux', 'macports', 'nim', 'none', 'openbsd', 'opkg', 'pacman', 'pip', 'pip3', 'pkg', 'pkgdmg', 'pkgin', 'pkgng', 'pkgutil', 'portage', 'ports', 'portupgrade', 'puppet_gem', 'rpm', 'rug', 'sun', 'sunfreeware', 'up2date', 'urpmi', 'windows', 'yum', 'zypper'],
-                },
-                'source' => {
-                  :expect     => [:string],
-                },
-                'pecl_source' => {
-                  :expect     => [:string],
-                },
-                'header_packages' => {
-                  :expect     => [:array],
-                },
-                'zend' => {
-                  :expect     => [:boolean],
-                  :mod_def    => 'false',
-                },
-                'settings' => {
-                  :expect     => [:hash_values],
-                },
-                'settings_prefix' => {
-                  :expect     => [:boolean],
-                  :mod_def    => 'false',
-                },
                 'compiler_packages' => {
                   :expect     => [:array],
                   :mod_def    => {
@@ -424,22 +484,143 @@ module DOA
                     'freebsd' => ['gcc'],
                   },
                 },
-                'package_prefix' => {
+                'ensure' => {
                   :expect     => [:string],
-                  :mod_def    => {
-                    'debian'  => 'php5-',
-                    'suse'    => 'php5-',
-                    'redhat'  => 'php-',
-                    'freebsd' => 'php56-',
+                  :allow      => ['absent', 'purged', 'present', 'installed', 'latest', 'held'],
+                  :mod_def    => 'installed',
+                  :doa_def    => {
+                    :dev      => 'latest',
+                    :test     => 'latest',
+                    :prod     => 'present',
                   },
+                },
+                'header_packages' => {
+                  :expect     => [:array],
+                },
+                'pecl_source' => {
+                  :expect     => [:string],
+                },
+                'prefix' => {
+                  :children => {
+                    'package' => {
+                      :maps_to    => 'package_prefix',
+                      :expect     => [:string],
+                      :mod_def    => {
+                        'debian'  => 'php5-',
+                        'suse'    => 'php5-',
+                        'redhat'  => 'php-',
+                        'freebsd' => 'php56-',
+                      },
+                    },
+                    'settings' => {
+                      :maps_to    => 'settings_prefix',
+                      :expect     => [:boolean],
+                      :mod_def    => 'false',
+                    },
+                  },
+                },
+                'provider' => {
+                  :expect     => [:string],
+                  :allow      => ['pecl', 'aix', 'appdmg', 'apt', 'aptitude',
+                    'aptrpm', 'blastwave', 'dpkg', 'fink', 'freebsd', 'gem',
+                    'hpux', 'macports', 'nim', 'none', 'openbsd', 'opkg',
+                    'pacman', 'pip', 'pip3', 'pkg', 'pkgdmg', 'pkgin', 'pkgng',
+                    'pkgutil', 'portage', 'ports', 'portupgrade', 'puppet_gem',
+                    'rpm', 'rug', 'sun', 'sunfreeware', 'up2date', 'urpmi',
+                    'windows', 'yum', 'zypper'
+                  ],
+                },
+                'settings' => {
+                  :expect     => [:hash_values],
+                },
+                'source' => {
+                  :expect     => [:string],
+                },
+                'zend' => {
+                  :expect     => [:boolean],
+                  :mod_def    => 'false',
+                },
+              },
+            },
+            # This is the prefix for constructing names of php packages. This
+            # defaults to a sensible default depending on your operating system,
+            # like 'php-' or 'php5-'.
+            'package_prefix' => {
+              :maps_to    => 'php::package_prefix',
+              :expect     => [:string],
+              :mod_def    => {
+                'default' => 'php5-',
+                'freebsd' => 'php56-',
+                'redhat'  => 'php-',
+              },
+            },
+            'repo' => {
+              :children => {
+                'ppa' => {
+                  :maps_to    => 'php::repo::ubuntu::ppa',
+                  :expect     => :string,
+                  :mod_def    => 'ondrej/php5',
+                  :doa_def    => 'ondrej/php5-5.6',
+                  :cb_process => "#{ self.to_s }#check_manage",
+                },
+                # Include repository (dotdeb, ppa, etc.) to install recent PHP from.
+                'manage' => {
+                  :maps_to    => 'php::manage_repos',
+                  :expect     => :boolean,
+                  #:mod_def    => {
+                  #  'default' => 'false',
+                  #  'debian'  => 'true',
+                  #  'suse'    => 'true',
+                  #},
                 },
               },
             },
             'settings' => {
               :maps_to    => 'php::settings',
               :expect     => [:hash_values],
+              :doa_def    => {
+                :dev => {
+                  'Date/date.timezone'            => 'Europe/Madrid',
+                  'PHP/allow_url_fopen'           => 'On',
+                  'PHP/allow_url_include'         => 'Off',
+                  'PHP/cgi.fix_pathinfo'          => 0,
+                  'PHP/disable_functions'         => 'getmyuid, getmypid, passthru, leak, listen, diskfreespace, tmpfile, link, ignore_user_abord, dl, set_time_limit, system, highlight_file, source, show_source, fpaththru, virtual, posix_ctermid, posix_getcwd, posix_getegid, posix_geteuid, posix_getgid, posix_getgrgid, posix_getgrnam, posix_getgroups, posix_getlogin, posix_getpgid, posix_getpgrp, posix_getpid, posix, _getppid, posix_getpwnam, posix_getpwuid, posix_getrlimit, posix_getsid, posix_getuid, posix_isatty, posix_kill, posix_mkfifo, posix_setegid, posix_seteuid, posix_setgid, posix_setpgid, posix_setsid, posix_setuid, posix_times, posix_ttyname, posix_uname',
+                  'PHP/enable_dl'                 => 'Off',
+                  'PHP/expose_php'                => 'Off',
+                  'PHP/session.save_path'         => '/var/lib/php',
+                  'PHP/session.cookie_httponly'   => 1,
+                  'PHP/display_errors'            => 'On',
+                  'PHP/display_startup_errors'    => 'On',
+                  'PHP/track_errors'              => 'On',
+                  'PHP/html_errors'               => 'On',
+                },
+                :prod => {
+                  'Date/date.timezone'            => 'Europe/Madrid',
+                  'PHP/allow_url_fopen'           => 'Off',
+                  'PHP/allow_url_include'         => 'Off',
+                  'PHP/cgi.fix_pathinfo'          => 0,
+                  'PHP/disable_functions'         => 'php_uname, getmyuid, getmypid, passthru, leak, listen, diskfreespace, tmpfile, link, ignore_user_abord, shell_exec, dl, set_time_limit, exec, system, highlight_file, source, show_source, fpaththru, virtual, posix_ctermid, posix_getcwd, posix_getegid, posix_geteuid, posix_getgid, posix_getgrgid, posix_getgrnam, posix_getgroups, posix_getlogin, posix_getpgid, posix_getpgrp, posix_getpid, posix, _getppid, posix_getpwnam, posix_getpwuid, posix_getrlimit, posix_getsid, posix_getuid, posix_isatty, posix_kill, posix_mkfifo, posix_setegid, posix_seteuid, posix_setgid, posix_setpgid, posix_setsid, posix_setuid, posix_times, posix_ttyname, posix_uname, proc_open, proc_close, proc_get_status, proc_nice, proc_terminate',
+                  'PHP/enable_dl'                 => 'Off',
+                  'PHP/expose_php'                => 'Off',
+                  'PHP/session.save_path'         => '/var/lib/php',
+                  'PHP/session.cookie_httponly'   => 1,
+                  'PHP/display_errors'            => 'On',
+                  'PHP/display_startup_errors'    => 'On',
+                  'PHP/track_errors'              => 'On',
+                  'PHP/html_errors'               => 'On',
+                },
+              }
             },
           }
+        # Unofficial versions and distros supported by Ondřej Surý (Ubuntu):
+        #   Lucid    (10.04)       5.4.x
+        #   Precise  (12.04) LTS   5.4.x   5.5.x   5.6.x           apache2
+        #   Quantal  (12.10)       5.4.x
+        #   Saucy    (13.10)               5.5.x
+        #   Trusty   (14.04) LTS           5.5.x   5.6.x   7.0.x   apache2
+        #   Utopic   (14.10)                       5.6.x           apache2
+        #   Vidid    (15.04)                       5.6.x   7.0.x   apache2
+        #   Wily     (15.04)                       5.6.x   7.0.x   apache2
         REPO_ONDREJ = {
             '5.4' => "'http://ppa.launchpad.net/ondrej/php5-oldstable/ubuntu/'",
             '5.5' => "'http://ppa.launchpad.net/ondrej/php5/ubuntu/'",
@@ -447,18 +628,21 @@ module DOA
             '7.0' => "'http://ppa.launchpad.net/ondrej/php-7.0/ubuntu/'",
           }
 
-        def self.custom_setup(provided)
-          DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
-            'php::manage_repos' => 'false',
-          })
+        def self.check_manage(value)
+          @provided.recursive_set!(['repo', 'manage'], 'true') if !value.empty?
+          DOA::Provisioner::Puppet.enqueue_site_content("if defined(Class['::php::repo::ubuntu']) {
+  Class['::php::repo::ubuntu'] ~> Exec['apt_update'] -> Class['::php::packages']
+}
+")
+          value
         end
+
         def self.set_hiera_param(value, yaml_param, set = true)
           # Check if `ensure` provided, and set it depending on environment type
           # Children settings are processed before parent, so `ensure` is already set if present
           if !DOA::Provisioner::Puppet.sw_stack.has_key?(@label) or !DOA::Provisioner::Puppet.sw_stack[@label].has_key?(@supported[yaml_param][:children]['ensure'][:maps_to])
             maps_to = @supported[yaml_param][:children]['ensure'].has_key?(:maps_to) ? @supported[yaml_param][:children]['ensure'][:maps_to] : yaml_param
             DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {
-              #@supported[yaml_param][:children]['ensure'][:maps_to] => "'#{ @supported[yaml_param][:children]['ensure'][:doa_def][DOA::Guest.env] }"
               maps_to => "'#{ @supported[yaml_param][:children]['ensure'][:doa_def][DOA::Guest.env] }'"
             })
           end
@@ -467,57 +651,6 @@ module DOA
           mod_def = get_default_value(@supported[yaml_param], :mod_def)
           return doa_def ? doa_def : mod_def
         end
-          # Add repos from Ondřej Surý for PHP 5.4.x, 5.5.x, 5.6.x
-          #case Puppet.os_info(OS_FAMILY)
-          #when DOA::OS::LINUX_FAMILY_DEBIAN
-          #  wanted_repos =
-          #    case Puppet.os_info(OS_DISTRO)
-          #    when DOA::OS::LINUX_UBUNTU then
-          #      # Unofficial versions and distros supported by Ondřej Surý (Ubuntu):
-          #      #   Lucid    (10.04)       5.4.x
-          #      #   Precise  (12.04) LTS   5.4.x   5.5.x   5.6.x           apache2
-          #      #   Quantal  (12.10)       5.4.x
-          #      #   Saucy    (13.10)               5.5.x
-          #      #   Trusty   (14.04) LTS           5.5.x   5.6.x   7.0.x   apache2
-          #      #   Utopic   (14.10)                       5.6.x           apache2
-          #      #   Vidid    (15.04)                       5.6.x   7.0.x   apache2
-          #      #   Wily     (15.04)                       5.6.x   7.0.x   apache2
-          #      case Puppet.os_info(OS_DISTRO_VER)
-          #      when DOA::OS::UBUNTU_LUCID, DOA::OS::UBUNTU_QUANTAL then ['5.4']
-          #      when DOA::OS::UBUNTU_SAUCY then ['5.5']
-          #      when DOA::OS::UBUNTU_UTOPIC then ['5.6']
-          #      when DOA::OS::UBUNTU_PRECISE then ['5.4', '5.5', '5.6']
-          #      when DOA::OS::UBUNTU_TRUSTY then ['5.5', '5.6']
-          #      else []
-          #      end
-          #    else []
-          #    end
-          #
-          #  guest_repos = {
-          #      '5.4' => "'http://ppa.launchpad.net/ondrej/php5-oldstable/ubuntu/'",
-          #      '5.5' => "'http://ppa.launchpad.net/ondrej/php5/ubuntu/'",
-          #      '5.6' => "'http://ppa.launchpad.net/ondrej/php5-5.6/ubuntu/'",
-          #      #'7.0' => "'http://ppa.launchpad.net/ondrej/php-7.0/ubuntu/'",
-          #    }#.select { |key,_| wanted_repos.include? key }
-          #
-          #  REPO_ONDREJ.each do |php_ver, location|
-          #    escaped_php_ver = php_ver.gsub('.', '_')
-          #    Puppet.enqueue_apt_repo("php_ondrej_#{ escaped_php_ver }", {
-          #      'ensure'   => wanted_repos.include?(php_ver) ? "'present'" : "'absent'",
-          #      'comment'  => "'PPA for latest PHP #{ php_ver }.x packages by Ondřej Surý'",
-          #      'location' => location,
-          #      'key'      => {'id' => "'14AA40EC0831756756D7F66C4F4EA0AAE5267A6C'"},
-          #    }, {'before' => "Class['php']"})
-          #  end
-          #
-          #  # Add ppa:ondrej/apache2 to resolve unmet dependencies
-          #  Puppet.enqueue_apt_repo('apache2_ondrej', {
-          #    'ensure'   => wanted_repos.include?(php_ver) ? "'present'" : "'absent'",
-          #    'comment'  => "'PPA for latest Apache 2 packages by Ondřej Surý'",
-          #    'location' => "'http://ppa.launchpad.net/ondrej/apache2/ubuntu/'",
-          #    'key'      => {'id' => "'14AA40EC0831756756D7F66C4F4EA0AAE5267A6C'"},
-          #  }, {'before' => "Class['php']"})
-          #end
       end
     end
   end

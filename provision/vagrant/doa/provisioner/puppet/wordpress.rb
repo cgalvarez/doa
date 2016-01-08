@@ -8,6 +8,8 @@ module DOA
       class WordPress < PuppetModule
         # Constants.
         MOD_CGALVAREZ_WORDPRESS = 'cgalvarez/wordpress'
+        MOD_CGALVAREZ_PMA = 'cgalvarez/phpmyadmin'
+        MOD_VELALUQA_PMA = 'velaluqa/phpmyadmin'
         DEF_INSTALL_DIR = '/opt/wordpress'
 
         # Class variables.
@@ -16,7 +18,7 @@ module DOA
         @librarian    = {
           MOD_CGALVAREZ_WORDPRESS => {
             :git  => 'git://github.com/cgalvarez/puppet-wordpress.git',
-            :ver  => '1.0.0',
+          #  #:ver  => '1.0.2',
           },
         }
         @from_path    = nil
@@ -45,6 +47,15 @@ module DOA
                           :maps_to => 'create_db_user',
                           :mod_def => 'true',
                         },
+                        # Specifies whether to create the test db/user or not
+                        'test' => {
+                          :expect  => [:boolean],
+                          :maps_to => 'create_db_test',
+                          :mod_def => 'false',
+                          :doa_def => {
+                            :dev   => 'true',
+                          },
+                        },
                       },
                     },
                     # Specifies the database name which the wordpress module
@@ -71,6 +82,35 @@ module DOA
                       :expect  => [:puppet_interpolable_string],
                       :mod_def => 'password',
                       :maps_to => 'db_password',
+                    },
+                  },
+                },
+                'install' => {
+                  :children => {
+                    'admin' => {
+                      :children => {
+                        'email' => {
+                          :expect  => [:string],
+                          :maps_to => 'install_data_admin_email',
+                        },
+                        'password' => {
+                          :expect  => [:string],
+                          :maps_to => 'install_data_admin_password',
+                        },
+                        'user' => {
+                          :expect  => [:string],
+                          :maps_to => 'install_data_admin_user',
+                        },
+                      },
+                    },
+                    'title' => {
+                      :expect  => [:string],
+                      :maps_to => 'install_data_title',
+                    },
+                    'url' => {
+                      :expect     => [:string],
+                      :maps_to    => 'install_data_url',
+                      :cb_process => "#{ self.to_s }#setup_install_url",
                     },
                   },
                 },
@@ -224,6 +264,10 @@ module DOA
                       :mod_def => 'wp_',
                       :maps_to => 'wp_table_prefix',
                     },
+                    # Specifies the version of wordpress to install.
+                    'version' => {
+                      :expect  => [:string],
+                    },
                   },
                 },
                 'plugins' => {
@@ -239,8 +283,8 @@ module DOA
           }
 
         def self.get_path(sync)
-          @from_path = "#{ DOA::Host.session.guest_projects_path }/#{ DOA::Guest.provisioner.current_project }" if @from_path.nil?
-          @to_path   = get_install_dir if @to_path.nil?
+          @from_path = "#{ DOA::Host.session.guest_projects_path }/#{ DOA::Guest.provisioner.current_project }"
+          @to_path   = get_install_dir
           if sync.from.instance.instance_of?(Host)
             @path[:from], @path[:to] = @from_path, @to_path
           elsif sync.from.instance.instance_of?(Guest)
@@ -255,13 +299,22 @@ module DOA
         # and recursively checks all parameters for the requested software,
         # setting the appropriate values.
         def self.setup(settings)
-          @provided = settings
+          @provided = settings.blank? ? {} : { 'instances' => {
+              DOA::Guest.provisioner.current_project.nil? ? 'base' : DOA::Guest.provisioner.current_project => settings }
+            }
           DOA::Provisioner::Puppet.enqueue_librarian_mods(@librarian) if @librarian.is_a?(Hash) and !@librarian.blank?
           DOA::Provisioner::Puppet.enqueue_hiera_classes(@hieraclasses) if @hieraclasses.is_a?(Array) and !@hieraclasses.blank?
-          DOA::Provisioner::Puppet.enqueue_hiera_params(@label, set_params(@supported,
-            (!settings.nil? and settings.is_a?(Hash)) ? {'instances' => {
-              DOA::Guest.provisioner.current_project.nil? ? 'base' : DOA::Guest.provisioner.current_project => settings }
-            } : {})) if !@supported.empty?
+          DOA::Provisioner::Puppet.enqueue_hiera_params(@label, set_params()) if !@supported.empty?
+
+          # Required PHP extensions
+          php = DOA::Provisioner::Puppet.const_get(DOA::Setting::PM_PHP)
+          defaults = { 'ensure' => "'latest'" }
+          ['mysql'].each do |ext|
+            provided = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_PHP, 'extensions', ext], DOA::Setting::PM_PHP)
+            DOA::Provisioner::Puppet.enqueue_hiera_params(DOA::Setting::PM_PHP, {
+                'php::extensions' => { "'#{ ext }'"  => provided.nil? ? defaults : defaults.merge(provided) }
+              }) if !php.supported.empty?
+            end
 
           # Install development software when installing WordPress in development
           # environment unless explicitly stated the opposite
@@ -276,35 +329,71 @@ module DOA
                 FileUtils.mkdir_p @path[:from]
               end
               sync.listen_to.insert(-1, @path[:from])
+              gsub_slashes = sync.to.os == DOA::OS::WINDOWS ? ".gsub('/', \"\\\\\")" : ''
+              mkdir_path_quotes = sync.to.os == DOA::OS::WINDOWS ? '"' : ''
               sync.conditions[@path[:from]] = [
                   "from = path.gsub('#{ @path[:from] }', '#{ DOA::SSH.escape(sync.from.os, @path[:from]) }')",
                   "to = path.gsub('#{ @path[:from] }', '#{ DOA::SSH.escape(sync.to.os, @path[:to]) }')",
+                  "dir = '#{ mkdir_path_quotes }' + File.dirname(path).gsub('#{ @path[:from] }', '#{ @path[:to] }')#{ gsub_slashes } + '#{ mkdir_path_quotes }'",
                 ]
-              add_excludes(sync)
+              add_excludes(sync)  # No need to add excludes since it propagues fsevents of specific dirs/files
             end
 
-            # XDebug (PHP extension)
-            xdebug_ensure = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_PHP, 'extensions', 'xdebug', 'ensure'], DOA::Setting::PM_PHP)
-            if !['absent', 'purged'].include?(xdebug_ensure)
-              php      = DOA::Provisioner::Puppet.const_get(DOA::Setting::PM_PHP)
-              provided = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_PHP, 'extensions', 'xdebug'], DOA::Setting::PM_PHP)
-              defaults = {
-                'settings' => {
-                  'xdebug.remote_connect_back'      => 1,
-                  'xdebug.remote_enable'            => 1,
-                  'xdebug.remote_handler'           => 'dbgp',
-                  'xdebug.remote_host'              => "#{ DOA::Host.ip }",
-                  'xdebug.remote_port'              => 9000,
-                  'xdebug.profiler_enable'          => 1,
-                  'xdebug.profiler_enable_trigger'  => 1,
-                  'xdebug.profiler_output_dir'      => '/var/log/xdebug',
-                  'xdebug.profiler_output_name'     => 'profile.%R-%u',
-                },
-              }
-              DOA::Provisioner::Puppet.enqueue_hiera_params(DOA::Setting::PM_PHP, set_params(php.supported, {
-                  'extensions' => { 'xdebug' => provided.nil? ? defaults : defaults.merge(provided) }
-                })) if !php.supported.empty?
+            # PhpMyAdmin
+            # If you get session errors, exec 'chmod -R 777 /var/lib/php'
+            # (use the folder in /etc/php/7.0/fpm/php.ini#session.save_path)
+            DOA::Provisioner::Puppet.enqueue_librarian_mods({ MOD_CGALVAREZ_PMA => {
+                :git => 'git://github.com/cgalvarez/puppet-phpmyadmin.git',
+                :ref => 'develop',
+              }})
+            DOA::Provisioner::Puppet.enqueue_hiera_classes(['phpmyadmin'])
+            DOA::Provisioner::Puppet.enqueue_hiera_params(DOA::Setting::PM_PMA, {
+                'phpmyadmin::path'    => "'#{ DOA::Provisioner::Puppet::Nginx::DEF_WWW_ROOT }/pma'",
+                'phpmyadmin::user'    => DOA::Guest::USER,
+                'phpmyadmin::servers' => [
+                  {
+                    'host'      => "'127.0.0.1'",
+                    'auth_type' => "'cookie'",
+                  },
+                ],
+              })
+
+            # PHP extensions required for development:
+            #   - Mink Selenium2 driver: curl
+            #   - PHPDoc: xsl
+            #   - PhpMyAdmin: mcrypt, mysql
+            # Other useful ones: xdebug
+            ['curl', 'mcrypt', 'xdebug', 'xsl'].each do |ext|
+              ext_ensure = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_PHP, 'extensions', ext, 'ensure'], DOA::Setting::PM_PHP)
+              if !['absent', 'purged'].include?(ext_ensure)
+                provided = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_PHP, 'extensions', ext], DOA::Setting::PM_PHP)
+                defaults = ext != 'xdebug' ? { 'ensure' => "'latest'" } : {
+                  'package_prefix'  => "'php-'",
+                  'settings'        => {
+                    "'xdebug.remote_connect_back'"      => 1,
+                    "'xdebug.remote_enable'"            => 1,
+                    "'xdebug.remote_handler'"           => "'dbgp'",
+                    "'xdebug.remote_host'"              => "'#{ DOA::Host.ip }'",
+                    "'xdebug.remote_port'"              => 9000,
+                    "'xdebug.profiler_enable'"          => 1,
+                    "'xdebug.profiler_enable_trigger'"  => 1,
+                    "'xdebug.profiler_output_dir'"      => "'/var/log/xdebug'",
+                    "'xdebug.profiler_output_name'"     => "'profile.%R-%u'",
+                  },
+                }
+                DOA::Provisioner::Puppet.enqueue_hiera_params(DOA::Setting::PM_PHP, {
+                    'php::extensions' => { "'#{ ext }'" => provided.nil? ? defaults : defaults.merge(provided) }
+                  }) if !php.supported.empty?
+              end
             end
+
+            DOA::Provisioner::Puppet.enqueue_site_content("
+# DON'T load XDebug for PHP-CLI (improves composer performance, and it's mostly used with PHP-FPM)
+file { 'remove_xdebug_phpcli_ini_file':
+  ensure  => 'absent',
+  path    => '/etc/php/7.0/cli/conf.d/20-xdebug.ini',
+  require => Php::Extension['xdebug'],
+}")
           end
         end
 
@@ -314,6 +403,15 @@ module DOA
           install_dir  = value.empty? ? DEF_INSTALL_DIR : value
           install_dir  = "#{ install_dir }/#{ ['true', 'on', 'yes', '1'].include?(subdirectory.to_s) ? DOA::Guest.provisioner.current_project : subdirectory }" if !subdirectory.nil?
           return install_dir
+        end
+
+        def self.setup_install_url(value)
+          if value.empty?
+            subdirectory = DOA::Tools.get_puppet_mod_prioritized_def_value([DOA::Setting::SW_WP, 'wp', 'subdirectory'], DOA::Setting::PM_WP)
+            value = "http://wp.#{ DOA::Guest.name }.vm"
+            value = "#{ value }/#{ ['true', 'on', 'yes', '1'].include?(subdirectory.to_s) ? DOA::Guest.provisioner.current_project : subdirectory }" if !subdirectory.nil?
+          end
+          value
         end
 
         def self.setup_presync_excludes(value)
@@ -326,21 +424,19 @@ module DOA
         end
 
         def self.setup_listen_ignores(value)
-          ignores  = (value.is_a?(Array) and !value.empty?) ? value : DOA::Sync::DEFAULT_IGNORES
+          ignores = (value.is_a?(Array) and !value.empty?) ? value : DOA::Sync::DEFAULT_EXCLUDES.map { |folder| "/#{ folder }" }
           [DOA::Host.sync, DOA::Guest.sync].each do |sync|
-            get_path(sync)
-            from_escaped = @path[:from].gsub('/', '\/')
-            sync.ignores.push(*(ignores.map { |pattern| "#{ from_escaped }\\/#{ pattern }" }))
+            sync.ignores.push(*ignores)
           end
           nil
         end
 
         def self.add_excludes(sync, excludes = [])
-          if sync.presync[:dirs].has_key?(DOA::SSH.escape(sync.from.os, @path[:from], true))
-            sync.presync[:dirs][DOA::SSH.escape(sync.from.os, @path[:from], true)][:exclude].push(*excludes)
+          if sync.presync[:dirs].has_key?(DOA::SSH.escape(sync.to.os, @path[:to], true))
+            sync.presync[:dirs][DOA::SSH.escape(sync.to.os, @path[:to], true)][:exclude].push(*excludes)
           else
-            sync.presync[:dirs][DOA::SSH.escape(sync.from.os, @path[:from], true)] = {
-              :to       => DOA::SSH.escape(sync.to.os, @path[:to]),
+            sync.presync[:dirs][DOA::SSH.escape(sync.to.os, @path[:to], true)] = {
+              :to       => DOA::SSH.escape(sync.from.os, @path[:from]),
               :exclude  => excludes,
             }
           end
@@ -351,12 +447,15 @@ module DOA
           assets = {}
           if value.is_a?(Hash) and !value.empty?
             asset_defaults = {
-              'install'  => 'true',
-              'activate' => 'true',
+              'install'  => nil,
+              'activate' => nil,
               'delete'   => nil,
               'version'  => nil,
+              'provider' => nil,
+              'source'   => nil,
+              'identity' => nil,
             }
-            #get_path(DOA::Guest.sync)
+
             value.each do |slug, config|
               slug_key = "'#{ slug }'"
               # Check allowed types/values
@@ -369,17 +468,19 @@ module DOA
               end
 
               # Prepare Hiera data
-              assets[slug_key] = {
-                'install'  => config.has_key?('install') ? config['install'].to_s : asset_defaults['install'],
-                'activate' => config.has_key?('activate') ? config['activate'].to_s : asset_defaults['activate'],
-                'delete'   => config.has_key?('delete') ? config['delete'].to_s : asset_defaults['delete'],
-                'version'  => "'#{ config.has_key?('version') ? config['version'] : asset_defaults['version'] }'",
-              }
+              assets[slug_key] = {}
+              asset_defaults.each do |key, def_val|
+                assets[slug_key][key] = config.has_key?(key) ? config[key].to_s : asset_defaults[key]
+              end
+              if assets[slug_key]['install'].nil? and assets[slug_key]['activate'].nil?
+                assets[slug_key]['install']   = 'true'
+                assets[slug_key]['activate']  = 'true'
+              end
               assets[slug_key].delete_if { |key, value| value.nil? }
+              assets[slug_key].each do |key, value|
+                assets[slug_key][key] = "'#{ assets[slug_key][key] }'" if ['version', 'provider', 'source'].include?(key)
+              end
             end
-
-            # Load WP-CLI puppet class and install it for managing assets
-            DOA::Provisioner::Puppet.enqueue_hiera_classes('wordpress::wpcli')
 
             # Set assets up depending upon machine (host/guest)
             [DOA::Host.sync, DOA::Guest.sync].each do |sync|

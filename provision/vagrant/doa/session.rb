@@ -6,13 +6,15 @@ module DOA
     attr_reader :path, :pub, :auth_keys_reloaded, :machine_session,
       :projects_path, :guest_projects_path, :guest_listener, :guest_hosts_pp,
       :guest_papply, :guest_puppet_conf, :guest_puppetfile, :guest_hiera_yaml,
-      :guest_common_yaml, :guest_hostname_yaml, :guest_site_pp,
+      :guest_common_yaml, :guest_site_pp, :guest_presync, :guest_hostname_yaml,
     # Guest session attributes
       :hosts_pp,
-      :tmp_papply, :tmp_puppet_conf, :tmp_puppetfile, :tmp_hiera_yaml, :tmp_common_yaml, :tmp_hostname_yaml, :tmp_site_pp,
-      :papply, :puppet_conf, :puppetfile, :hiera_yaml, :common_yaml, :hostname_yaml, :site_pp,
+      :tmp_papply, :tmp_puppet_conf, :tmp_puppetfile, :tmp_hiera_yaml,
+      :tmp_common_yaml, :tmp_hostname_yaml, :tmp_site_pp,
+      :papply, :puppet_conf, :puppetfile, :hiera_yaml, :common_yaml,
+      :hostname_yaml, :site_pp, :presync,
     # Session common attributes
-      :pid, :launcher, :listener, :ppk, :log_rsync
+      :pid, :launcher, :listener, :ppk, :log_rsync, :log_listener
 
     # Makes the default initialization.
     # Params:
@@ -26,21 +28,23 @@ module DOA
         @pub                = "#{ @ppk }.pub"
         @pid                = "#{ @path }/pid"
         @launcher           = "#{ @path }/launcher.ps1"
-        @listener           = "#{ @path }/fsevents_host.rb"
+        @listener           = "#{ @path }/listener.rb"
         @log_rsync          = "#{ @path }/rsync.log"
+        @log_listener       = "#{ @path }/listener.log"
         @auth_keys_reloaded = "#{ @path }/auth_keys_reloaded"
         @user_domain        = ENV['USERDOMAIN']
         @user_name          = ENV['USERNAME']
 
         # Auto-generated files for the guest machine in the host machine
-        @guest_listener       = "#{ @path }/fsevents_guest.rb"
+        @guest_listener       = "#{ @path }/listener_guest.rb"
+        @guest_presync        = "#{ @path }/presync.rb"
         @guest_hosts_pp       = "#{ @path }/hosts.pp"
         @guest_papply         = "#{ @path }/papply"
         @guest_puppet_conf    = "#{ @path }/puppet.conf"
         @guest_puppetfile     = "#{ @path }/Puppetfile"
         @guest_hiera_yaml     = "#{ @path }/hiera.yaml"
         @guest_common_yaml    = "#{ @path }/common.yaml"
-        @guest_hostname_yaml  = "#{ @path }/hostname.yaml"
+        @guest_hostname_yaml  = "#{ @path }/node.yaml"
         @guest_site_pp        = "#{ @path }/site.pp"
         @guest_projects_path  = "#{ @projects_path }/#{ DOA::Guest.name }"
 
@@ -48,9 +52,11 @@ module DOA
         Dir.mkdir(@path) unless File.exists?(@path) and File.directory?(@path)
       else
         @ppk        = "#{ DOA::Guest::HOME }/.ssh/#{ DOA::Host.hostname }"
-        @log_rsync  = "#{ DOA::Guest::HOME }/rsync.log"
+        @log_rsync  = "#{ DOA::Guest::HOME }/.doa/rsync.log"
+        @log_rsync  = "#{ DOA::Guest::HOME }/.doa/listener.log"
         @hosts_pp   = "#{ DOA::Guest::TMP }/hosts.pp"
-        @listener   = "#{ DOA::Guest::TMP }/fsevents_guest.rb"
+        @listener   = "#{ DOA::Guest::HOME }/.doa/listener.rb"
+        @presync    = "#{ DOA::Guest::HOME }/.doa/presync.rb"
 
         # PROVISIONER: Puppet
         @tmp_papply         = "#{ DOA::Guest::TMP }/papply"

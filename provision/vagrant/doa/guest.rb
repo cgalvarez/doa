@@ -41,6 +41,7 @@ module DOA
     @@os_distro_ver   = nil     # Filled and cached by chosen provisioner
     @@provision       = false
     @@env             = nil
+    @@presynced       = false
 
     # Getters
     def self.name
@@ -48,6 +49,9 @@ module DOA
     end
     def self.aliases
       @@aliases
+    end
+    def self.set_aliases(value)
+      @@aliases = value
     end
     def self.box
       @@box
@@ -118,6 +122,12 @@ module DOA
     def self.env
       @@env
     end
+    def self.set_presynced(value)
+      @@presynced = value
+    end
+    def self.presynced
+      @@presynced
+    end
 
     # Makes the default initialization.
     # +name+:: string containing the name of the guest machine
@@ -135,7 +145,7 @@ module DOA
         when DOA::Provisioner::Docker::TYPE then DOA::Provisioner::Docker.instance
         else DOA::Provisioner::Puppet.instance
         end
-      @@hostname = "#{ @@name }.doa.guest"
+      @@hostname = "#{ @@name }.vm"
       @@provider_vname = "doa_guest_#{ @@name }"
       @@sh_header = (@@name.nil? ? "==>" : "    #{ @@name }:").colorize(:light_white)
       @@ssh_address = "#{ @@user }@#{ @@hostname }"
@@ -160,9 +170,10 @@ module DOA
       elsif settings.has_key?('ip') and !(settings['ip'] =~ IP_REGEX).nil?
         @@ip = settings['ip']
       end
-      if ARGV.include?('--provision')
+      if ARGV.include?('--provision') or ARGV.include?('provision')
         @@provision = true
       end
+      @@presynced       = false
       @@os_family       = nil     # Filled and cached by chosen provisioner
       @@os_distro       = nil     # Filled and cached by chosen provisioner
       @@os_distro_ver   = nil     # Filled and cached by chosen provisioner
@@ -286,6 +297,7 @@ module DOA
 
           # Manage host entry
           printf(DOA::L10n::GUEST_HOSTS_HOST_ENTRY, @@sh_header, @@hostname, DOA::SSH.escape(@@os, hosts_path))
+          puts '' if !$machine_exists
           exitstatus = ssh([
             "sudo puppet apply #{ @@session.hosts_pp }",
             "sudo rm -f #{ @@session.hosts_pp }",

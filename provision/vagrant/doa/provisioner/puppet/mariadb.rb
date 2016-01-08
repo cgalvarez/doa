@@ -29,7 +29,7 @@ module DOA
         @librarian    = {
           MOD_CGALVAREZ_MARIADB => {
             :git  => 'git://github.com/cgalvarez/puppet-mariadb.git',
-            #:ver  => '1.0.0',
+            :ver  => '1.0.3',
           },
         }
         @supported = {
@@ -37,11 +37,6 @@ module DOA
               :expect  => :url,
               :maps_to => "mariadb::mirror",
               :mod_def => 'http://ftp.osuosl.org/pub/mariadb',
-              :doa_def => {
-                :dev   => 'http://ftp.osuosl.org/pub/mariadb',
-                :test  => 'http://ftp.osuosl.org/pub/mariadb',
-                :prod  => 'http://ftp.osuosl.org/pub/mariadb',
-              },
             },
             'server' => {
               :exclude    => ['cluster'],
@@ -66,7 +61,6 @@ module DOA
                   :doa_def    => {
                     :dev      => 'latest',
                     :test     => 'latest',
-                    :prod     => 'present',
                   },
                 },
                 # server -> client
@@ -81,7 +75,6 @@ module DOA
                       :doa_def    => {
                         :dev      => '10.1',
                         :test     => '10.1',
-                        :prod     => '10.0',
                       },
                     },
                     'ensure' => {
@@ -94,7 +87,6 @@ module DOA
                       :doa_def    => {
                         :dev      => 'latest',
                         :test     => 'latest',
-                        :prod     => 'present',
                       },
                     },
                   },
@@ -124,7 +116,6 @@ module DOA
                       :doa_def    => {
                         :dev      => 'latest',
                         :test     => 'latest',
-                        :prod     => 'present',
                       },
                     },
                   },
@@ -138,11 +129,7 @@ module DOA
                   :expect     => [:semver_version, :semver_branch],
                   :cb_process => "#{ self.to_s }#process_param@version,cluster",
                   :mod_def    => '',
-                  :doa_def    => {
-                    :dev      => '10.0',
-                    :test     => '10.0',
-                    :prod     => '10.0',
-                  },
+                  :doa_def    => '10.0',
                 },
                 'ensure' => {
                   :expect     => [:string],
@@ -152,7 +139,6 @@ module DOA
                   :doa_def    => {
                     :dev      => 'latest',
                     :test     => 'latest',
-                    :prod     => 'present',
                   },
                 },
                 # cluster -> client
@@ -167,7 +153,6 @@ module DOA
                       :doa_def    => {
                         :dev      => '10.1',
                         :test     => '10.1',
-                        :prod     => '10.0',
                       },
                     },
                     'ensure' => {
@@ -180,7 +165,6 @@ module DOA
                       :doa_def    => {
                         :dev      => 'latest',
                         :test     => 'latest',
-                        :prod     => 'present',
                       },
                     },
                   },
@@ -210,7 +194,6 @@ module DOA
                       :doa_def    => {
                         :dev      => 'latest',
                         :test     => 'latest',
-                        :prod     => 'present',
                       },
                     },
                   },
@@ -240,7 +223,6 @@ module DOA
                       :doa_def    => {
                         :dev      => 'latest',
                         :test     => 'latest',
-                        :prod     => 'present',
                       },
                     },
                   },
@@ -250,8 +232,6 @@ module DOA
           }
 
         def self.custom_setup(provided)
-          #Puppet.enqueue_relationship("Class['#{ MOD_CGALVAREZ_MARIADB }']", {'before' => "Class['#{ PHP.label }']"}) if Puppet.current_stack.has_key?(PHP.label)
-
           # Configure swap file when low available memory
           if DOA::Guest.mem < 1024
             DOA::Provisioner::Puppet.enqueue_puppetfile_mods(['petems/swap_file'])
@@ -267,12 +247,13 @@ swap_file::files { 'mariadb_swapfile':
         end
 
         def self.process_param(value, param, parent = NODE_TYPE_SERVER)
-          if @provided.is_a?(Hash) and @provided.has_key?(parent)
+          path = parent.gsub(DOA::Tools::GLUE_KEYS, ' children ').split.map { |x| x == 'children' ? :children : x }
+          provided = @provided.recursive_get(path, nil, true)
+          if !provided.nil?
             if NODE_CHILDREN.has_key?(parent)
-              # Set the version for all children parameters
+              # Set param ensure/version for all children parameters
               NODE_CHILDREN[parent].each do |child|
-                @provided[parent][child] = {} if !@provided[parent].has_key?(child)
-                @provided[parent][child][param] = value
+                @provided.recursive_set!([parent, child, param], value)
               end
             end
 
@@ -292,9 +273,8 @@ swap_file::files { 'mariadb_swapfile':
                     when NODE_TYPE_SERVER then 'MariaDB Server'
                     when NODE_TYPE_CLUSTER then 'MariaDB Galera Cluster'
                     end
-                  puts sprintf(DOA::L10n::MARIADB_NO_SUPPORT, DOA::Guest.sh_header, DOA::Guest.hostname,
-                    DOA::Guest.provisioner.current_project, @label.downcase, tag, value).colorize(:red)
-                  raise SystemExit
+                  DOA::L10n::print(DOA::L10n::MARIADB_NO_SUPPORT, DOA::L10n::MSG_TYPE_ERROR,
+                    [DOA::Guest.provisioner.current_project, @label.downcase], [tag, value], true)
                 end
               # Specific version
               elsif DOA::Tools::valid_version?(value, [], [], true, false)
@@ -309,23 +289,25 @@ swap_file::files { 'mariadb_swapfile':
                 if !parent_cfg.has_key?('ensure')
                   @provided.recursive_set!(keys.push('ensure'), 'present')
                 elsif parent_cfg['ensure'] == 'latest'
-                  puts sprintf(DOA::L10n::VERSION_INCOMP, DOA::Guest.sh_header, DOA::Guest.hostname,
-                    DOA::Guest.provisioner.current_project, @label.downcase, 'ensure', 'latest').colorize(:red)
-                  raise SystemExit
+                  DOA::L10n::print(DOA::L10n::VERSION_INCOMP, DOA::L10n::MSG_TYPE_ERROR,
+                    [DOA::Guest.provisioner.current_project, @label.downcase], ['ensure', 'latest'], true)
                 end
               # Allowed branch
               elsif !value.nil? and ALLOWED_BRANCHES.has_key?(parent) and ALLOWED_BRANCHES[parent].include?(value)
                 @branch = value
               end
-              @branch = '10.0' if @branch.nil?  # Default branch
+
+              # Default branch
+              @branch = @supported.recursive_get(path + [:children, param, :doa_def, DOA::Guest.env], nil) if @branch.nil?
+              @branch = @supported.recursive_get(path + [:children, param, :mod_def, DOA::Guest.env], nil) if @branch.nil?
+              @branch = '10.0' if @branch.nil?
 
               # All involved items must belong to the same branch
               if @req_branches.empty?
                 @req_branches.insert(-1, @branch)
               elsif !@req_branches.include?(@branch)
-                puts sprintf(DOA::L10n::BRANCH_INCOMP, DOA::Guest.sh_header, DOA::Guest.hostname,
-                  DOA::Guest.provisioner.current_project, @label.downcase).colorize(:red)
-                raise SystemExit
+                DOA::L10n::print(DOA::L10n::BRANCH_INCOMP, DOA::L10n::MSG_TYPE_ERROR,
+                  [DOA::Guest.provisioner.current_project, @label.downcase], [], true)
               end
 
               # Set the repository branch according to the requested version/branch
@@ -335,7 +317,8 @@ swap_file::files { 'mariadb_swapfile':
                 else nil
                 end
               if !main_class.nil?
-                DOA::Provisioner::Puppet.enqueue_hiera_params(@label, {"mariadb::#{ main_class }::repo_version" => "'#{ @branch }'"})
+                DOA::Provisioner::Puppet.enqueue_hiera_params(@label,
+                  {"mariadb::#{ main_class }::repo_version" => "'#{ @branch }'"})
               end
             end
 

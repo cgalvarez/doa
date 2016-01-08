@@ -8,8 +8,7 @@ module DOA
     # Constants
     OPT_RSYNC       = '-vpaLzr --delete-after --compress-level=9'
     WWW_ROOT        = '/var/www'
-    DEFAULT_IGNORES = ['(.*\/)*\.git']
-    DEFAULT_EXCLUDES= ['.git']
+    DEFAULT_EXCLUDES= ['node_modules/', 'bower_components/', 'vendor/', 'versions/']
     REGEX_META      = ['(', ')', '[', ']', '{', '}', '.', '?', '+', '*', '/']
 
     attr_reader :from, :to, :listener, :launcher, :ssh_user, :ssh_key, :rsync_user, :quotes
@@ -45,15 +44,22 @@ module DOA
       ssh_exec = @from.os == DOA::OS::WINDOWS ? `where ssh | grep 'MinGW'`.strip : 'ssh'
       cmd_ssh = "#{ ssh_exec } -l #{ @ssh_user } #{ DOA::SSH::OPT_RSYNC } -i #{ @quotes }#{ @ssh_key }#{ @quotes }"
       @presync = {
-          :cmd  => "rsync -e \"#{ cmd_ssh }\" #{ OPT_RSYNC } --log-file #{ @quotes }#{ @from.session.log_rsync }#{ @quotes }",
+          :cmd  => "rsync -e 'ssh -i #{ @from.session.ppk } #{ DOA::SSH::OPT_SSH_PASS }' #{ OPT_RSYNC } --log-file #{ @quotes }#{ @from.session.log_rsync }#{ @quotes }",
           :dirs => {},
         }
     end
 
     # Starts background-listening the provided paths of the caller machine.
     def start
-      create_listener
-      create_launcher
+      if DOA::Guest.provision
+        create_presync
+        create_launcher
+        create_listener
+      end
+      if !DOA::Guest.presynced
+        start_presync
+        DOA::Guest.set_presynced(true)
+      end
       start_listener
     end
 
@@ -62,7 +68,7 @@ module DOA
       printf(DOA::L10n::STOP_BG_LISTENING, DOA::Guest.sh_header, @from.hostname)
       case @from.os
       when DOA::OS::WINDOWS
-        if @from.instance.instance_of? Host
+        if @from.instance.instance_of? DOA::Host
           if File.exist?(@from.session.pid)
             pid = nil
             File.open(@from.session.pid, 'r+') { |file| pid = file.read.strip }
@@ -94,166 +100,102 @@ module DOA
     end
 
     def create_listener
-      DOA::Guest.settings[DOA::Setting::PROJECTS].each do |project, config|
-        if config.has_key?(DOA::Setting::PROJECT_STACK) and config[DOA::Setting::PROJECT_STACK].is_a?(Hash)
-          vm_www_root = DOA::Tools.check_get(DOA::Guest.settings, DOA::Tools::TYPE_STRING,
-            [DOA::Guest.settings[DOA::Setting::HOSTNAME], DOA::Setting::WWW_ROOT], DOA::Setting::WWW_ROOT, '')
-          site_www_root = DOA::Tools.check_get(config, DOA::Tools::TYPE_STRING,
-            [DOA::Guest.settings[DOA::Setting::HOSTNAME], project, DOA::Setting::PROJECT_WWW_ROOT], DOA::Setting::PROJECT_WWW_ROOT, '')
-          if !site_www_root.empty?
-            root = site_www_root
-          elsif !vm_www_root.empty?
-            root = "#{ vm_www_root }/#{ project }"
-          else
-            root = "#{ Sync::WWW_ROOT }/#{ project }"
-          end
-          config[DOA::Setting::PROJECT_STACK].each do |sw, setup|
-            case sw
-            when DOA::Setting::SW_WP
-              setup_listener_for_wordpress_site(project, root, setup)
-            end
-          end
-        end
-      end
-
-      # Set the contents of the listener script
       if !@listen_to.empty?
+        # Set the contents of the listener script
         printf(DOA::L10n::CREATE_LISTENER, DOA::Guest.sh_header, @from.hostname)
         listener = File.open((@from.instance.instance_of? Guest) ? DOA::Host.session.guest_listener : DOA::Host.session.listener, 'w')
         listener << ERB.new(File.read(DOA::Templates.listener), nil, '-').result(binding)
         listener.close
         puts DOA::L10n::SUCCESS_OK
+
+        if @from.instance.instance_of? Guest
+          # Secure copy of the listener script into guest
+          printf(DOA::L10n::SCP_LISTENER, DOA::Guest.sh_header, @from.hostname)
+          exitstatus = @from.scp(DOA::Host.session.guest_listener, @from.session.listener)
+          exitstatus = @from.ssh([
+            "sudo chmod 600 #{ @from.session.listener }",
+            "sudo chown #{ @from.user }:#{ @from.user } #{ @from.session.listener }",
+          ]) if exitstatus == 0
+          puts exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
+
+          # Install required gems if not present
+          printf(DOA::L10n::INSTALL_RUBY_GEMS_LISTENER, DOA::Guest.sh_header, @from.hostname)
+          required_gems = ['listen', 'colorize']
+          exitstatus = @from.ssh(required_gems.map { |gem|
+            "sudo /bin/sh -c 'if ! gem dependency #{ gem } --local >/dev/null 2>&1; then sudo gem install #{ gem }; fi'"
+          })
+          puts exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
+        end
       end
     end
 
+    def create_presync
+      if @from.instance.instance_of? Guest
+        # Set the contents of the pre-rsync script
+        printf(DOA::L10n::CREATE_PRESYNC, DOA::Guest.sh_header)
+        listener = File.open(DOA::Host.session.guest_presync, 'w')
+        listener << ERB.new(File.read(DOA::Templates.presync), nil, '-').result(binding)
+        listener.close
+        puts DOA::L10n::SUCCESS_OK
+
+        # Create DOA hidden folder
+        @from.ssh(["mkdir -p #{ DOA::Guest::HOME }/.doa"]) if @from.instance.instance_of?(Guest)
+
+        # Secure copy of the presync script into guest
+        printf(DOA::L10n::SCP_PRESYNC, DOA::Guest.sh_header, DOA::Guest.hostname)
+        exitstatus = DOA::Guest.scp(DOA::Host.session.guest_presync, DOA::Guest.session.presync)
+        puts exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
+      end
+    end
+
+    def start_presync
+      printf(DOA::L10n::FULL_INITIAL_PRESYNC, DOA::Guest.sh_header, @from.hostname)
+      exitstatus = @from.ssh(["ruby #{ @from.session.presync }"])
+      puts exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
+    end
+
     def create_launcher
-      if !@listen_to.empty?
-        case @from.os
-        when DOA::OS::WINDOWS
-          if @from.instance.instance_of? Host
-            # Set the contents of the Powershell script to launch in background the active listening
-            printf(DOA::L10n::CREATE_BG_LAUNCHER, DOA::Guest.sh_header, @from.hostname)
-            launcher = File.open(@from.session.launcher, 'w')
-            launcher << ERB.new(File.read(DOA::Templates.launcher)).result(binding)
-            launcher.close
-            puts DOA::L10n::SUCCESS_OK
-          # TODO
-          #elsif if @from.instance.instance_of? Guest
-          end
-        when DOA::OS::LINUX
-          # TODO: Launcher is not necessary, but we want to save the pid in a file...
+      case @from.os
+      when DOA::OS::WINDOWS
+        if @from.instance.instance_of? Host
+          # Set the contents of the Powershell script to launch in background the active listening
+          printf(DOA::L10n::CREATE_BG_LAUNCHER, DOA::Guest.sh_header, @from.hostname)
+          launcher = File.open(@from.session.launcher, 'w')
+          launcher << ERB.new(File.read(DOA::Templates.launcher)).result(binding)
+          launcher.close
+          puts DOA::L10n::SUCCESS_OK
+        # TODO
+        #elsif if @from.instance.instance_of? Guest
         end
+      when DOA::OS::LINUX
+        # TODO: Launcher is not necessary, but we want to save the pid in a file...
       end
     end
 
     def start_listener
-      if !@listen_to.empty?
-        # Pre-rsync when required
-        if @from.instance.instance_of?(Guest) and !@presync[:dirs].empty?
-          printf(DOA::L10n::FULL_INITIAL_BIRSYNC, DOA::Guest.sh_header, @from.hostname, @to.hostname)
-          synced, total, failed = 0, @presync[:dirs].size, []
-          @presync[:dirs].each do |from, settings|
-            excludes = settings[:exclude].empty? ? '' : "--exclude '#{ settings[:exclude].join("' --exclude '") }'"
-            exitstatus = DOA::Guest.ssh(["#{ @presync[:cmd] } #{ excludes } #{ from } #{ @rsync_user }@#{ @to.hostname }:#{ settings[:to] }"], "'")
-            if exitstatus == 0
-              synced += 1
-            else
-              failed.push(from)
-            end
-          end
-          colour = case synced
-            when 0 then :red
-            when total then :green
-            else :yellow
-            end
-          puts '[' + "#{ synced }/#{ total }".colorize(colour) + ']'
-          printf(DOA::L10n::FAILED_SYNC, DOA::Guest.sh_header, "#{ DOA::Guest.sh_header }    - #{ failed.join("\n#{ DOA::Guest.sh_header }    - ")}") if !failed.empty?
+      # Launch appropriately
+      case @from.os
+      when DOA::OS::WINDOWS
+        if @from.instance.instance_of? Host
+          # Start background-listening
+          printf(DOA::L10n::START_BG_LISTENING, DOA::Guest.sh_header, @from.hostname)
+          `powershell -ExecutionPolicy Unrestricted -File "#{ @from.session.launcher }" -WindowStyle Hidden` # -NoExit
+          puts $?.exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
+        # TODO
+        #elsif if @from.instance.instance_of? Guest
         end
-
-        # Launch appropriately
-        case @from.os
-        when DOA::OS::WINDOWS
-          if @from.instance.instance_of? Host
-            # Start background-listening
-            printf(DOA::L10n::START_BG_LISTENING, DOA::Guest.sh_header, @from.hostname)
-            `powershell -ExecutionPolicy Unrestricted -File "#{ @from.session.launcher }" -WindowStyle Hidden` # -NoExit
-            puts $?.exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
-          # TODO
-          #elsif if @from.instance.instance_of? Guest
-          end
-        when DOA::OS::LINUX
-          if @from.instance.instance_of? Host
-            printf(DOA::L10n::START_BG_LISTENING, DOA::Guest.sh_header, @from.hostname)
-            `ruby #{ @from.session.listener } >/dev/null 2>&1 &`
-            puts $?.exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
-          elsif @from.instance.instance_of? Guest
-            # Secure copy of the listener script into guest
-            printf(DOA::L10n::SCP_LISTENER, DOA::Guest.sh_header, @from.hostname)
-            exitstatus = @from.scp(DOA::Host.session.guest_listener, @from.session.listener)
-            exitstatus = @from.ssh([
-              "sudo chmod 600 #{ @from.session.listener }",
-              "sudo chown #{ @from.user }:#{ @from.user } #{ @from.session.listener }",
-            ]) if exitstatus == 0
-            puts exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
-
-            # Install required gems if not present
-            printf(DOA::L10n::INSTALL_RUBY_GEMS_LISTENER, DOA::Guest.sh_header, @from.hostname)
-            required_gems = ['listen', 'colorize']
-            exitstatus = @from.ssh(required_gems.map { |gem|
-              "sudo /bin/sh -c 'if ! gem dependency #{ gem } --local >/dev/null 2>&1; then sudo gem install #{ gem }; fi'"
-            })
-            puts exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
-
-            # Start background-listening
-            # TODO: Check that there isn't another background listener process running
-            printf(DOA::L10n::START_BG_LISTENING, DOA::Guest.sh_header, @from.hostname)
-            exitstatus = @from.ssh(["ruby #{ @from.session.listener } >/dev/null 2>&1 &"])
-            puts exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
-          end
-        end
-      end
-    end
-
-    def setup_listener_for_wordpress_site(fqdn, root, setup)
-      [DOA::Setting::WP_ASSET_PLUGIN, DOA::Setting::WP_ASSET_THEME].each do |type|
-        if setup.has_key?(type)
-          setup[type].each do |asset, params|
-            sync_mode = (params.has_key?(DOA::Setting::ASSET_SYNC_MODE) and
-                params[DOA::Setting::ASSET_SYNC_MODE].is_a? String and
-                !params[DOA::Setting::ASSET_SYNC_MODE].empty?) ?
-              params[DOA::Setting::ASSET_SYNC_MODE] : DOA::Setting::SYNC_BRSYNC
-            path = DOA::Tools.check_get(params, DOA::Tools::TYPE_STRING,
-              [DOA::Guest.settings[DOA::Setting::HOSTNAME], fqdn, DOA::Setting::SW_WP,
-                asset, DOA::Setting::ASSET_PATH], DOA::Setting::ASSET_PATH, '')
-
-            if sync_mode == DOA::Setting::SYNC_BRSYNC and !path.empty?
-              # Build the from/to absolute paths
-              from_path = (Pathname.new(path)).absolute? ? path : File.expand_path(path)
-              to_path = "#{ root }/wp-content/#{ type }/#{ asset }"
-              from_path, to_path = to_path, from_path if @from.instance.instance_of? Guest
-
-              # Prepare the rsync exclusions and listen ignores
-              @listen_to.insert(-1, from_path)
-              asset_excludes = DOA::Tools.check_get(params, DOA::Tools::TYPE_ARRAY,
-                [DOA::Guest.settings[DOA::Setting::HOSTNAME], fqdn, DOA::Setting::SW_WP,
-                  asset, DOA::Setting::ASSET_EXCLUDE], DOA::Setting::ASSET_EXCLUDE, [])
-              all_excludes = DOA::Sync::DEFAULT_IGNORES | asset_excludes
-              @excludes.push(*(all_excludes.map { |rgx| "#{ from_path }/#{ rgx }" }))
-              @ignores.push(*(all_excludes.map { |rgx|
-                # Escape regex metacharacters: (, ), [, ], {, }, ., ?, +, *
-                path = "#{ from_path }/#{ rgx }"
-                DOA::Sync::REGEX_META.each { |meta|
-                  path = path.gsub(/(?<!\\)#{ Regexp.escape(meta) }/, "\\#{ meta }")
-                }
-                path = path.gsub(/(?<!\.)\*/, ".*")
-              }))
-              # When rsyncing, origin path must end with a backslash, but not the target path
-              # in order to sync the contents of both paths and avoid creating new folders
-              @conditions[from_path] = "`\#{ cmd_partial_rsync } " \
-                "#{ DOA::SSH.escape(@from.os, from_path, true) } " \
-                "#{ @rsync_user }@#{ @to.hostname }:#{ DOA::SSH.escape(@to.os, to_path) }`"
-            end
-          end
+      when DOA::OS::LINUX
+        if @from.instance.instance_of? Host
+          printf(DOA::L10n::START_BG_LISTENING, DOA::Guest.sh_header, @from.hostname)
+          puts "ruby #{ @from.session.listener } >#{ @from.session.log_listener } 2>&1 &"
+          `ruby #{ @from.session.listener } >#{ @from.session.log_listener } 2>&1 &`
+          puts $?.exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
+        elsif @from.instance.instance_of? Guest
+          # Start background-listening
+          # TODO: Check that there isn't another background listener process running
+          printf(DOA::L10n::START_BG_LISTENING, DOA::Guest.sh_header, @from.hostname)
+          exitstatus = @from.ssh(["ruby #{ @from.session.listener } >/dev/null 2>&1 &"])
+          puts exitstatus == 0 ? DOA::L10n::SUCCESS_OK : DOA::L10n::FAIL_ERROR
         end
       end
     end

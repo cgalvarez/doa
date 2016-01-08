@@ -14,6 +14,9 @@ module DOA
     CORES             = 'cores'
     WWW_ROOT          = 'www_root'
     VM_STACK          = 'stack'
+    HOST_PPKS         = 'host_ppks'
+    KNOWN_HOSTS       = 'known_hosts'
+    LIBRARIAN_API     = 'librarian_api'
 
     # Site
     PROJECTS          = 'projects'
@@ -39,8 +42,12 @@ module DOA
     SW_METEOR         = 'meteor'
     SW_NGINX          = 'nginx'
     SW_NGINX_LABEL    = 'NGINX'
+    SW_NODEJS         = 'nodejs'
+    SW_NODEJS_LABEL   = 'Node.js Stack'
     SW_PHP            = 'php'
     PM_PHP            = 'PHP'
+    SW_PMA            = 'phpmyadmin'
+    PM_PMA            = 'phpMyAdmin'
     SW_WP             = 'wordpress'
     PM_WP             = 'WordPress'
 
